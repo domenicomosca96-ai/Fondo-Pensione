@@ -152,3 +152,14 @@ Cause tipiche:
 - Verifica URL:
   - `/healthz` deve rispondere `{"status":"ok"}`
   - `/` deve mostrare dashboard con form e grafico.
+
+
+## 9) Risolvere subito "Merge conflicts" (modo automatico)
+Se vuoi forzare `main` ad essere identico al branch Codex, usa lo script incluso:
+
+```bash
+./force_main_to_codex.sh codex/create-backend-code-for-vantaggio-pensione-k2ldcr
+```
+
+> Sostituisci il nome branch con quello mostrato nella tua PR GitHub.
+> Questo comando fa `reset --hard` su `main` e `push --force-with-lease`.
