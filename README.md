@@ -163,3 +163,17 @@ Se vuoi forzare `main` ad essere identico al branch Codex, usa lo script incluso
 
 > Sostituisci il nome branch con quello mostrato nella tua PR GitHub.
 > Questo comando fa `reset --hard` su `main` e `push --force-with-lease`.
+
+
+## 10) Fix immediato PR con badge rosso "Merge conflicts"
+Se vuoi che la PR diventi subito apribile/mergeabile (pulsante "Visualizza PR" senza blocco), aggiorna il branch PR con `main` mantenendo le modifiche del branch PR:
+
+```bash
+./fix_pr_merge_conflicts.sh codex/create-backend-code-for-vantaggio-pensione-k2ldcr
+```
+
+Questo comando esegue:
+- `git merge origin/main -X ours` sul branch PR
+- push del branch PR aggiornato
+
+Dopo 10-30 secondi, ricarica la PR su GitHub.
