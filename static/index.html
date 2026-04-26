@@ -888,194 +888,358 @@ function generatePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-    const blu=[0,59,92], teal=[0,90,120], verde=[34,197,94], grigio=[100,116,139], bianco=[255,255,255];
-    const ARANCIO=[249,181,114], CIANO=[0,159,189], INDACO=[126,142,241], AZZURRO=[194,217,255];
-    const W = 210, H = 297;
+    // ---- PALETTE ----
+    const blu    = [0,59,92];
+    const teal   = [0,90,120];
+    const verde  = [22,101,52];
+    const verdeFill = [240,253,244];
+    const verdeAccent = [34,197,94];
+    const grigio = [100,116,139];
+    const bianco = [255,255,255];
+    const ARANCIO= [249,181,114];
+    const CIANO  = [0,159,189];
+    const INDACO = [126,142,241];
+    const AZZURRO= [194,217,255];
+    const W = 210, H = 297, M = 14;
+    const FOOTER_Y = H - 20;  // footer inizia qui
+    const SAFE_BOTTOM = FOOTER_Y - 8; // area sicura contenuto
 
-    // HEADER gradient
-    doc.setFillColor(...blu); doc.rect(0, 0, W, 48, 'F');
-    doc.setFillColor(...teal); doc.rect(0, 40, W, 8, 'F');
+    const sign = currentResults.vantaggioTotale >= 0 ? '+' : '';
+
+    // ---- HELPER: disegna footer (teal band) ----
+    function drawFooter(pageN, totalP) {
+        doc.setFillColor(...teal);
+        doc.rect(0, FOOTER_Y, W, 20, 'F');
+        doc.setTextColor(...bianco);
+        doc.setFontSize(8.5); doc.setFont(undefined, 'bold');
+        doc.text('Domenico Mosca | Consulente Finanziario FinecoBank', W/2, FOOTER_Y + 7, {align:'center'});
+        doc.setFont(undefined, 'normal'); doc.setFontSize(6.5);
+        doc.text(
+            'Simulazione a scopo informativo. Non costituisce consulenza finanziaria ai sensi del D.Lgs. 58/98. Dati soggetti a variazioni normative.',
+            W/2, FOOTER_Y + 13, {align:'center'}
+        );
+        doc.setFontSize(7); doc.setTextColor(194,217,255);
+        doc.text(`Pag. ${pageN}${totalP ? ' / '+totalP : ''}`, W - M, FOOTER_Y + 13, {align:'right'});
+    }
+
+    // ---- HELPER: mini header per pagine successive ----
+    function drawMiniHeader() {
+        doc.setFillColor(...blu);
+        doc.rect(0, 0, W, 12, 'F');
+        doc.setTextColor(...bianco);
+        doc.setFontSize(8); doc.setFont(undefined, 'bold');
+        doc.text('Report Previdenziale', M, 8);
+        doc.setFont(undefined, 'normal');
+        doc.text(`${leadData.nome} ${leadData.cognome}  ·  ${new Date().toLocaleDateString('it-IT')}`, W - M, 8, {align:'right'});
+    }
+
+    // ---- HELPER: intestazione di sezione ----
+    function sectionTitle(label, y) {
+        doc.setTextColor(...blu); doc.setFontSize(12); doc.setFont(undefined, 'bold');
+        doc.text(label, M, y);
+        doc.setDrawColor(...teal); doc.setLineWidth(0.35);
+        doc.line(M, y + 2, W - M, y + 2);
+        return y + 9;
+    }
+
+    // ---- HELPER: disegna donut jsPDF ----
+    function drawDonut(segs, cx, cy, rOut, rIn) {
+        const totV = segs.reduce((a,s)=>a+s.val, 0);
+        let ang = -Math.PI/2;
+        if (totV > 0) {
+            segs.forEach(s => {
+                const span = (s.val/totV) * Math.PI*2;
+                if (span <= 0) return;
+                const steps = Math.max(4, Math.ceil(span / 0.08));
+                doc.setFillColor(...s.col);
+                for (let i=0; i<steps; i++) {
+                    const a1 = ang + span*i/steps, a2 = ang + span*(i+1)/steps;
+                    doc.triangle(
+                        cx+Math.cos(a1)*rOut, cy+Math.sin(a1)*rOut,
+                        cx+Math.cos(a2)*rOut, cy+Math.sin(a2)*rOut,
+                        cx, cy, 'F');
+                }
+                ang += span;
+            });
+        } else {
+            doc.setFillColor(220,220,220); doc.circle(cx, cy, rOut, 'F');
+        }
+        doc.setFillColor(...bianco); doc.circle(cx, cy, rIn, 'F');
+        return totV;
+    }
+
+    // ================================================================
+    // PAGINA 1 — Header + vantaggio + descrizione + confronto scenari
+    // ================================================================
+
+    // Header gradient
+    doc.setFillColor(...blu); doc.rect(0, 0, W, 46, 'F');
+    doc.setFillColor(...teal); doc.rect(0, 38, W, 8, 'F');
     doc.setTextColor(...bianco);
-    doc.setFontSize(24); doc.setFont(undefined, 'bold');
-    doc.text('Report Previdenziale', W/2, 20, { align:'center' });
-    doc.setFontSize(11); doc.setFont(undefined, 'normal');
-    doc.text(`${leadData.nome} ${leadData.cognome}  ·  ${new Date().toLocaleDateString('it-IT')}`, W/2, 30, { align:'center' });
-    doc.setFontSize(9);
-    doc.text('Domenico Mosca — Consulente Finanziario FinecoBank', W/2, 43, { align:'center' });
+    doc.setFontSize(22); doc.setFont(undefined, 'bold');
+    doc.text('Report Previdenziale Personalizzato', W/2, 18, {align:'center'});
+    doc.setFontSize(10); doc.setFont(undefined, 'normal');
+    doc.text(`${leadData.nome} ${leadData.cognome}  ·  ${new Date().toLocaleDateString('it-IT')}`, W/2, 28, {align:'center'});
+    doc.setFontSize(8);
+    doc.text('Domenico Mosca — Consulente Finanziario FinecoBank', W/2, 43, {align:'center'});
 
-    let y = 60;
+    let y = 58;
 
     // BIG NUMBER
-    doc.setFillColor(240, 253, 244); doc.roundedRect(14, y, W-28, 30, 3, 3, 'F');
-    doc.setDrawColor(...verde); doc.setLineWidth(0.6); doc.roundedRect(14, y, W-28, 30, 3, 3, 'S');
-    doc.setTextColor(22, 101, 52); doc.setFontSize(10); doc.setFont(undefined, 'bold');
-    doc.text('VANTAGGIO NETTO STIMATO', 20, y+9);
-    doc.setFont(undefined, 'normal'); doc.setFontSize(8);
-    doc.text('rispetto all\'alternativa standard', 20, y+14);
-    doc.setFontSize(26); doc.setFont(undefined, 'bold');
-    const sign = currentResults.vantaggioTotale >= 0 ? '+' : '';
-    doc.text(`${sign}${fmtMoney(currentResults.vantaggioTotale)}`, 20, y+26);
-    const percV = currentResults.totaleScenarioA > 0 ? currentResults.vantaggioTotale/currentResults.totaleScenarioA*100 : 0;
-    doc.setFillColor(...verde); doc.roundedRect(W-52, y+18, 36, 9, 2,2,'F');
-    doc.setTextColor(...bianco); doc.setFontSize(11);
-    doc.text(`${sign}${fmtPerc(percV)}`, W-34, y+24, {align:'center'});
-    y += 38;
+    doc.setFillColor(...verdeFill);
+    doc.roundedRect(M, y, W-M*2, 34, 3, 3, 'F');
+    doc.setDrawColor(...verdeAccent); doc.setLineWidth(0.8);
+    doc.roundedRect(M, y, W-M*2, 34, 3, 3, 'S');
+    doc.setTextColor(...verde); doc.setFontSize(9.5); doc.setFont(undefined, 'bold');
+    doc.text('VANTAGGIO NETTO STIMATO', M+6, y+8);
+    doc.setFont(undefined, 'normal'); doc.setFontSize(7.5); doc.setTextColor(34,101,52);
+    doc.text('rispetto all\'alternativa standard (TFR azienda o investimento fai-da-te)', M+6, y+13);
+    doc.setFontSize(28); doc.setFont(undefined, 'bold'); doc.setTextColor(...verde);
+    doc.text(`${sign}${fmtMoney(currentResults.vantaggioTotale)}`, M+6, y+28);
+    const percV = currentResults.totaleScenarioA > 0
+        ? currentResults.vantaggioTotale / currentResults.totaleScenarioA * 100 : 0;
+    doc.setFillColor(...verdeAccent);
+    doc.roundedRect(W-56, y+18, 42, 10, 2, 2, 'F');
+    doc.setTextColor(...bianco); doc.setFontSize(12); doc.setFont(undefined, 'bold');
+    doc.text(`${sign}${fmtPerc(percV)}`, W-35, y+25, {align:'center'});
+    y += 42;
 
-    // SEZIONE DESCRITTIVA: spiega da dove deriva il vantaggio
+    // Riquadro descrittivo
     {
-        const profiloLbl = isFreelance ? (isForfettario ? 'Professionista Forfettario' : 'Professionista Ordinario') : 'Dipendente';
-        const datoreEuroAnno = currentResults.ral * (currentResults.percDatore || 0) / 100;
-        const parts = [];
-        parts.push(`Profilo ${profiloLbl}, orizzonte ${currentResults.anni} anni: il vantaggio totale di ${sign}${fmtMoney(currentResults.vantaggioTotale)} deriva dalla somma di quattro componenti.`);
-        parts.push(`(1) Risparmio fiscale cumulato sulle deduzioni IRPEF dei versamenti: ${fmtMoney(Math.max(0, currentResults.risparmioFiscaleCash))}.`);
-        parts.push(`(2) Maggiori rendimenti netti del fondo (${parametri.fondo_rendimento_stimato}% lordo, tassazione ${parametri.tassazione_rendite_fondo}%) rispetto all'investimento alternativo: ${fmtMoney(Math.max(0, currentResults.visualRendimenti))}.`);
-        parts.push(`(3) Vantaggio della tassazione finale agevolata sul fondo (aliquota ${currentResults.aliquotaFinaleFondo.toFixed(1)}%) rispetto alla tassazione separata standard: ${fmtMoney(Math.max(0, currentResults.visualTasse))}.`);
-        if (!isFreelance && datoreEuroAnno > 0) {
-            parts.push(`(4) Contributo del datore di lavoro versato gratuitamente al fondo (${currentResults.percDatore}% della RAL ≈ ${fmtMoney(datoreEuroAnno)}/anno), per un valore netto finale di ${fmtMoney(Math.max(0, currentResults.valoreNettoDatore))}.`);
-        } else {
-            parts.push(`(4) Contributo del datore: non applicabile per il profilo selezionato (${fmtMoney(0)}).`);
-        }
-        const descrText = parts.join(' ');
-        doc.setFillColor(248,250,252); doc.roundedRect(14, y, W-28, 32, 3, 3, 'F');
-        doc.setDrawColor(...teal); doc.setLineWidth(0.2); doc.roundedRect(14, y, W-28, 32, 3, 3, 'S');
-        doc.setTextColor(...blu); doc.setFontSize(10); doc.setFont(undefined, 'bold');
-        doc.text('Da dove deriva il tuo vantaggio', 18, y+6);
-        doc.setFont(undefined, 'normal'); doc.setFontSize(8.5); doc.setTextColor(55,65,81);
-        const wrapped = doc.splitTextToSize(descrText, W-36);
-        doc.text(wrapped, 18, y+11);
-        y += 36;
-    }
-
-    // BAR CHART - confronto scenari
-    doc.setTextColor(...blu); doc.setFontSize(13); doc.setFont(undefined, 'bold');
-    doc.text('Confronto Scenari', 14, y); y += 3;
-    doc.setDrawColor(...teal); doc.setLineWidth(0.3); doc.line(14, y, W-14, y); y += 8;
-
-    const valA = currentResults.totaleScenarioA, valB = currentResults.totaleScenarioB;
-    const maxV = Math.max(valA, valB, 1);
-    const chartH = 50, chartX = 24, chartW = W-48;
-    const barW = 32;
-    // Baseline
-    doc.setDrawColor(220,220,220); doc.line(chartX, y+chartH, chartX+chartW, y+chartH);
-    // Bar A
-    const hA = (valA/maxV) * chartH;
-    doc.setFillColor(229,231,235);
-    doc.rect(chartX+chartW*0.2-barW/2, y+chartH-hA, barW, hA, 'F');
-    doc.setTextColor(30,41,59); doc.setFontSize(10); doc.setFont(undefined,'bold');
-    doc.text(fmtMoney(valA), chartX+chartW*0.2, y+chartH-hA-3, {align:'center'});
-    doc.setFontSize(8); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
-    doc.text(isFreelance ? 'Fai-da-te' : 'TFR Azienda', chartX+chartW*0.2, y+chartH+5, {align:'center'});
-    // Bar B
-    const hB = (valB/maxV) * chartH;
-    doc.setFillColor(...teal);
-    doc.rect(chartX+chartW*0.7-barW/2, y+chartH-hB, barW, hB, 'F');
-    doc.setTextColor(...teal); doc.setFontSize(10); doc.setFont(undefined,'bold');
-    doc.text(fmtMoney(valB), chartX+chartW*0.7, y+chartH-hB-3, {align:'center'});
-    doc.setFontSize(8); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
-    doc.text('Fondo Pensione', chartX+chartW*0.7, y+chartH+5, {align:'center'});
-    y += chartH + 14;
-
-    // PROFILO in 2 colonne
-    doc.setTextColor(...blu); doc.setFontSize(13); doc.setFont(undefined, 'bold');
-    doc.text('Il tuo Profilo', 14, y); y += 3;
-    doc.setLineWidth(0.3); doc.setDrawColor(...teal);
-    doc.line(14, y, W-14, y); y += 6;
-
-    const profilo = [
-        ['Profilo',         isFreelance ? (isForfettario ? 'Prof. Forfettario' : 'Prof. Ordinario') : 'Dipendente'],
-        ['Età attuale',     `${currentResults.eta} anni`],
-        ['Età pensione',    `${currentResults.etaPensione} anni`],
-        ['Orizzonte',       `${currentResults.anni} anni`],
-        ['Reddito Lordo',   fmtMoney(currentResults.ral) + ' /a'],
-        ['CCNL',            isFreelance ? 'N/A' : currentResults.ccnl],
-        ['Versamento/anno', fmtMoney(currentResults.volContribution)],
-        ['Contr. datore',   fmtMoney(currentResults.ral * currentResults.percDatore / 100)],
-    ];
-    const colW = (W-28)/2;
-    profilo.forEach(([lbl, val], i) => {
-        const col = i % 2, row = Math.floor(i/2);
-        const px = 14 + col*colW, py = y + row*8;
-        if (row % 2 === 0) { doc.setFillColor(248,250,252); doc.rect(px, py-4, colW, 8, 'F'); }
-        doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(...grigio);
-        doc.text(lbl + ':', px+4, py);
-        doc.setFont(undefined, 'bold'); doc.setTextColor(30,41,59);
-        doc.text(val, px+40, py);
-    });
-    y += Math.ceil(profilo.length/2) * 8 + 6;
-
-    // COMPOSIZIONE con donut chart
-    doc.setTextColor(...blu); doc.setFontSize(13); doc.setFont(undefined,'bold');
-    doc.text('Composizione del Vantaggio', 14, y); y += 3;
-    doc.line(14, y, W-14, y); y += 8;
-
-    const segs = [
-        {lbl:'Risparmio Fiscale',      val: Math.max(0,currentResults.risparmioFiscaleCash), col: ARANCIO},
-        {lbl:'Maggiori Rendimenti',    val: Math.max(0,currentResults.visualRendimenti),     col: CIANO},
-        {lbl:'Vantaggio Tass. Finale', val: Math.max(0,currentResults.visualTasse),          col: INDACO},
-        {lbl:'Contributo Datore',      val: Math.max(0,currentResults.valoreNettoDatore),    col: AZZURRO},
-    ];
-    const totSegs = segs.reduce((s,x)=>s+x.val, 0);
-    const tot = totSegs || 1;
-
-    // Donut: centro a (45, y+30), raggio 22
-    const cx = 45, cy = y+28, rOut = 22, rIn = 13;
-    let ang = -Math.PI/2;
-    if (totSegs > 0) {
-        segs.forEach(s => {
-            const span = (s.val/tot) * Math.PI*2;
-            if (span <= 0) return;
-            const steps = Math.max(3, Math.ceil(span / 0.1));
-            doc.setFillColor(...s.col);
-            for (let i=0; i<steps; i++) {
-                const a1 = ang + (span*i/steps), a2 = ang + (span*(i+1)/steps);
-                doc.triangle(
-                    cx+Math.cos(a1)*rOut, cy+Math.sin(a1)*rOut,
-                    cx+Math.cos(a2)*rOut, cy+Math.sin(a2)*rOut,
-                    cx, cy, 'F'
-                );
-            }
-            ang += span;
+        const profiloLbl = isFreelance
+            ? (isForfettario ? 'Professionista Forfettario' : 'Professionista Ordinario')
+            : 'Dipendente';
+        const datoreAnno = currentResults.ral * (currentResults.percDatore || 0) / 100;
+        const righe = [
+            `Profilo: ${profiloLbl}  |  Orizzonte: ${currentResults.anni} anni  |  Reddito lordo: ${fmtMoney(currentResults.ral)}/anno  |  Rendimento fondo: ${parametri.fondo_rendimento_stimato}% lordo`,
+            '',
+            `Il vantaggio totale di ${sign}${fmtMoney(currentResults.vantaggioTotale)} è la somma di quattro leve previdenziali:`,
+            `  • Risparmio fiscale IRPEF sui versamenti dedotti: ${fmtMoney(Math.max(0,currentResults.risparmioFiscaleCash))}`,
+            `  • Maggiori rendimenti netti del fondo vs investimento alternativo: ${fmtMoney(Math.max(0,currentResults.visualRendimenti))}`,
+            `  • Vantaggio tassazione finale agevolata (${currentResults.aliquotaFinaleFondo.toFixed(1)}% vs tassazione separata): ${fmtMoney(Math.max(0,currentResults.visualTasse))}`,
+            !isFreelance && datoreAnno > 0
+                ? `  • Contributo datore (${currentResults.percDatore}% RAL ≈ ${fmtMoney(datoreAnno)}/anno, netto finale): ${fmtMoney(Math.max(0,currentResults.valoreNettoDatore))}`
+                : `  • Contributo datore: non applicabile per il profilo selezionato`,
+        ];
+        const boxH = 10 + righe.length * 5.2;
+        doc.setFillColor(246,249,252);
+        doc.roundedRect(M, y, W-M*2, boxH, 3, 3, 'F');
+        doc.setDrawColor(...teal); doc.setLineWidth(0.2);
+        doc.roundedRect(M, y, W-M*2, boxH, 3, 3, 'S');
+        doc.setFillColor(...teal); doc.roundedRect(M, y, 3, boxH, 1.5, 1.5, 'F');
+        doc.setTextColor(...blu); doc.setFontSize(9); doc.setFont(undefined, 'bold');
+        doc.text('Da dove deriva il tuo vantaggio', M+7, y+6);
+        doc.setFont(undefined, 'normal'); doc.setFontSize(8); doc.setTextColor(40,55,71);
+        let ly = y+11;
+        righe.forEach(r => {
+            if (r === '') { ly += 1.5; return; }
+            const lines = doc.splitTextToSize(r, W-M*2-12);
+            doc.text(lines, M+7, ly);
+            ly += lines.length * 5.2;
         });
-    } else {
-        // Placeholder grigio se tutti i valori sono 0
-        doc.setFillColor(229,231,235); doc.circle(cx, cy, rOut, 'F');
+        y += boxH + 8;
     }
-    // Hole
-    doc.setFillColor(...bianco); doc.circle(cx, cy, rIn, 'F');
-    doc.setTextColor(...blu); doc.setFontSize(9); doc.setFont(undefined,'bold');
-    doc.text('TOTALE', cx, cy-2, {align:'center'});
-    doc.setFontSize(10);
-    doc.text(fmtMoney(totSegs), cx, cy+4, {align:'center'});
 
-    // Legenda — sempre tutte e 4 le voci
-    const lx = 80;
-    segs.forEach((s, i) => {
-        const ly = y + 6 + i*11;
-        doc.setFillColor(...s.col); doc.roundedRect(lx, ly-3, 5, 5, 1,1,'F');
-        doc.setTextColor(...grigio); doc.setFontSize(9); doc.setFont(undefined,'normal');
-        doc.text(s.lbl, lx+9, ly);
-        doc.setFont(undefined,'bold'); doc.setTextColor(30,41,59);
-        doc.text(fmtMoney(s.val), W-18, ly, {align:'right'});
-        doc.setFont(undefined,'normal'); doc.setTextColor(...grigio); doc.setFontSize(7);
-        const pct = totSegs > 0 ? (s.val/totSegs)*100 : 0;
-        doc.text(`${pct.toFixed(1)}%`, W-18, ly+4, {align:'right'});
-    });
-    y += 60;
+    // Confronto Scenari (bar chart)
+    y = sectionTitle('Confronto Scenari', y);
+    {
+        const valA = currentResults.totaleScenarioA;
+        const valB = currentResults.totaleScenarioB;
+        const maxV = Math.max(valA, valB, 1);
+        const cH = 48, cX = M + 10, cW = W - M*2 - 20, bW = 34;
+        doc.setDrawColor(220,220,220); doc.setLineWidth(0.3);
+        doc.line(cX, y+cH, cX+cW, y+cH);
+        // Barra A
+        const hA = (valA/maxV)*cH;
+        doc.setFillColor(220,225,235);
+        doc.roundedRect(cX+cW*0.2-bW/2, y+cH-hA, bW, hA, 2, 2, 'F');
+        doc.setTextColor(30,41,59); doc.setFontSize(9.5); doc.setFont(undefined,'bold');
+        doc.text(fmtMoney(valA), cX+cW*0.2, y+cH-hA-4, {align:'center'});
+        doc.setFontSize(7.5); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
+        doc.text(isFreelance ? 'Investimento Fai-da-te' : 'TFR in Azienda', cX+cW*0.2, y+cH+5, {align:'center'});
+        // Barra B
+        const hB = (valB/maxV)*cH;
+        doc.setFillColor(...teal);
+        doc.roundedRect(cX+cW*0.7-bW/2, y+cH-hB, bW, hB, 2, 2, 'F');
+        doc.setTextColor(...teal); doc.setFontSize(9.5); doc.setFont(undefined,'bold');
+        doc.text(fmtMoney(valB), cX+cW*0.7, y+cH-hB-4, {align:'center'});
+        doc.setFontSize(7.5); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
+        doc.text('Con Fondo Pensione', cX+cW*0.7, y+cH+5, {align:'center'});
+        // Delta freccia
+        const delta = valB - valA;
+        const dSign = delta >= 0 ? '+' : '';
+        doc.setFillColor(240,253,244); doc.roundedRect(W/2-22, y+cH-12, 44, 10, 2, 2, 'F');
+        doc.setTextColor(...verde); doc.setFontSize(9); doc.setFont(undefined,'bold');
+        doc.text(`${dSign}${fmtMoney(delta)}`, W/2, y+cH-5, {align:'center'});
+        y += cH + 14;
+    }
 
-    // Aliquota fondo
-    doc.setFillColor(254,252,232); doc.roundedRect(14, y, W-28, 14, 3,3,'F');
-    doc.setDrawColor(234,179,8); doc.roundedRect(14, y, W-28, 14, 3,3,'S');
-    doc.setTextColor(133,100,4); doc.setFontSize(9); doc.setFont(undefined,'normal');
-    doc.text(`Aliquota fiscale finale sul fondo: ${currentResults.aliquotaFinaleFondo.toFixed(1)}% (calcolata su ${currentResults.anni} anni di contribuzione — min. 9%, max. 15%)`, W/2, y+9, {align:'center'});
-    y += 22;
+    drawFooter(1, 2);
 
-    // Footer
-    doc.setFillColor(...teal);
-    doc.rect(0, H-22, W, 22, 'F');
-    doc.setTextColor(...bianco); doc.setFontSize(9); doc.setFont(undefined,'bold');
-    doc.text('Domenico Mosca | Consulente Finanziario FinecoBank', W/2, H-14, {align:'center'});
-    doc.setFont(undefined,'normal'); doc.setFontSize(7);
-    doc.text('Simulazione a scopo informativo. Non costituisce consulenza finanziaria ai sensi del D.Lgs. 58/98. Dati soggetti a variazioni normative.', W/2, H-7, {align:'center'});
+    // ================================================================
+    // PAGINA 2 — Profilo + Composizione + Dettaglio + Erogazione + Note
+    // ================================================================
+    doc.addPage();
+    drawMiniHeader();
+    y = 22;
+
+    // ---- IL TUO PROFILO ----
+    y = sectionTitle('Il tuo Profilo', y);
+    {
+        const datoreAnnoEur = currentResults.ral * (currentResults.percDatore || 0) / 100;
+        const profilo = [
+            ['Tipo di profilo',   isFreelance ? (isForfettario ? 'Prof. Forfettario' : 'Prof. Ordinario') : 'Dipendente',
+             'Età attuale',       `${currentResults.eta} anni`],
+            ['Età di pensionamento', `${currentResults.etaPensione} anni`,
+             'Orizzonte temporale',  `${currentResults.anni} anni`],
+            ['Reddito Lordo',     fmtMoney(currentResults.ral) + ' /anno',
+             'CCNL',              isFreelance ? 'N/A' : (currentResults.ccnl || 'N/A')],
+            ['Versamento annuo',  fmtMoney(currentResults.volContribution),
+             'Contributo datore', datoreAnnoEur > 0 ? `${currentResults.percDatore}% = ${fmtMoney(datoreAnnoEur)}/a` : 'Non presente'],
+            ['Cap. già versato',  fmtMoney(currentResults.montanteStart || 0),
+             'Regime fiscale',    isFreelance ? (isForfettario ? 'Forfettario' : 'Ordinario') : 'IRPEF ordinario'],
+        ];
+        const cw = (W - M*2) / 2;
+        profilo.forEach((row, ri) => {
+            const py = y + ri * 10;
+            if (ri % 2 === 0) {
+                doc.setFillColor(247,250,253); doc.rect(M, py-3, W-M*2, 10, 'F');
+            }
+            [0,1].forEach(col => {
+                const px = M + col * cw;
+                const lbl = row[col*2], val = row[col*2+1];
+                doc.setFontSize(8); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
+                doc.text(lbl + ':', px + 3, py+3);
+                doc.setFont(undefined,'bold'); doc.setTextColor(25,35,50);
+                doc.text(val, px + 3, py+8);
+            });
+        });
+        y += profilo.length * 10 + 8;
+    }
+
+    // ---- COMPOSIZIONE DEL VANTAGGIO ----
+    y = sectionTitle('Composizione del Vantaggio', y);
+    {
+        const segs = [
+            {lbl:'Risparmio Fiscale IRPEF',  val: Math.max(0,currentResults.risparmioFiscaleCash), col: ARANCIO},
+            {lbl:'Maggiori Rendimenti Netti', val: Math.max(0,currentResults.visualRendimenti),     col: CIANO},
+            {lbl:'Vantaggio Tass. Finale',    val: Math.max(0,currentResults.visualTasse),          col: INDACO},
+            {lbl:'Contributo Datore',         val: Math.max(0,currentResults.valoreNettoDatore),    col: AZZURRO},
+        ];
+        const totSegs = segs.reduce((a,s)=>a+s.val, 0);
+
+        // Donut più grande
+        const cx = M + 28, cy = y + 32, rOut = 26, rIn = 15;
+        drawDonut(segs, cx, cy, rOut, rIn);
+        // Label centro
+        doc.setTextColor(...blu); doc.setFontSize(7); doc.setFont(undefined,'bold');
+        doc.text('TOTALE', cx, cy-3, {align:'center'});
+        doc.setFontSize(8.5);
+        doc.text(fmtMoney(totSegs), cx, cy+4, {align:'center'});
+
+        // Legenda a destra del donut, 4 righe
+        const lx = M + 64;
+        segs.forEach((s, i) => {
+            const ly = y + 4 + i * 16;
+            // sfondo riga alternato
+            if (i % 2 === 0) {
+                doc.setFillColor(248,250,252); doc.rect(lx-2, ly-4, W-lx-M+2, 15, 'F');
+            }
+            doc.setFillColor(...s.col);
+            doc.roundedRect(lx, ly-1, 6, 6, 1, 1, 'F');
+            doc.setTextColor(40,50,60); doc.setFontSize(8.5); doc.setFont(undefined,'bold');
+            doc.text(s.lbl, lx+9, ly+4);
+            doc.setFontSize(10); doc.setFont(undefined,'bold'); doc.setTextColor(...blu);
+            doc.text(fmtMoney(s.val), W-M, ly+4, {align:'right'});
+            doc.setFontSize(7.5); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
+            const pct = totSegs > 0 ? (s.val/totSegs*100).toFixed(1) : '0.0';
+            doc.text(`${pct}% del totale`, W-M, ly+9, {align:'right'});
+        });
+        y += 72;
+    }
+
+    // ---- DETTAGLIO ANALITICO ----
+    y = sectionTitle('Dettaglio Analitico', y);
+    {
+        const rows = [
+            ['Capitale fondo pensione (lordo)', fmtMoney(currentResults.fondoNetto + (currentResults.fondoNetto * currentResults.aliquotaFinaleFondo / (100 - currentResults.aliquotaFinaleFondo) || 0))],
+            ['Aliquota fiscale finale fondo', `${currentResults.aliquotaFinaleFondo.toFixed(1)}% (calcolata su ${currentResults.anni} anni — min. 9%, max. 15%)`],
+            ['Capitale fondo netto (dopo imposte)', fmtMoney(currentResults.fondoNetto)],
+            ['Scenario alternativo netto', fmtMoney(currentResults.totaleScenarioA)],
+            ['Scenario con fondo netto', fmtMoney(currentResults.totaleScenarioB)],
+            ['Vantaggio netto totale', `${sign}${fmtMoney(currentResults.vantaggioTotale)}`],
+        ];
+        rows.forEach((r, i) => {
+            const ry = y + i * 9;
+            if (i % 2 === 0) { doc.setFillColor(247,250,253); doc.rect(M, ry-2, W-M*2, 9, 'F'); }
+            const isLast = i === rows.length - 1;
+            if (isLast) { doc.setFillColor(240,253,244); doc.rect(M, ry-2, W-M*2, 9, 'F'); }
+            doc.setFontSize(8); doc.setFont(undefined,'normal');
+            if (isLast) doc.setTextColor(...verde); else doc.setTextColor(...grigio);
+            doc.text(r[0], M+4, ry+4);
+            doc.setFont(undefined,'bold');
+            if (isLast) doc.setTextColor(...verde); else doc.setTextColor(25,35,50);
+            doc.text(r[1], W-M, ry+4, {align:'right'});
+        });
+        y += rows.length * 9 + 8;
+    }
+
+    // ---- RENDITA / CAPITALE ----
+    y = sectionTitle('Proiezione Erogazione a Fine Carriera', y);
+    {
+        const coeff = (() => {
+            const ep = currentResults.etaPensione;
+            const map = [[70,0.059],[67,0.054],[64,0.050],[62,0.047],[60,0.045]];
+            for (const [age,v] of map) if (ep >= age) return v;
+            return 0.045;
+        })();
+        const soglia = parametri.assegno_sociale_annuo_2025 * 0.5;
+        const montante70 = currentResults.fondoNetto * 0.70;
+        const renditaTest = montante70 * coeff;
+        const canAllCapital = renditaTest < soglia;
+        const maxCapPerc = canAllCapital ? 100 : 50;
+
+        const scenarios = [
+            { lbl: 'Solo Rendita (0% capitale)', cap: 0, rend: 100 },
+            { lbl: `50% Capitale / 50% Rendita${canAllCapital ? '' : ' (max legge)'}`, cap: 50, rend: 50 },
+        ];
+        if (canAllCapital) scenarios.push({ lbl: '100% Capitale (rendita esigua)', cap: 100, rend: 0 });
+
+        doc.setFillColor(248,250,252); doc.roundedRect(M, y, W-M*2, scenarios.length * 13 + 10, 3, 3, 'F');
+        doc.setDrawColor(...teal); doc.setLineWidth(0.2); doc.roundedRect(M, y, W-M*2, scenarios.length * 13 + 10, 3, 3, 'S');
+        doc.setFontSize(7.5); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
+        doc.text(`Coefficiente di conversione per età ${currentResults.etaPensione} anni: ${(coeff*100).toFixed(1)}%  |  ${canAllCapital ? '✓ Rendita esigua: puoi ritirare il 100% in capitale' : 'Max 50% in capitale (D.Lgs. 252/2005)'}`, M+4, y+6);
+        scenarios.forEach((sc, i) => {
+            const ry = y + 10 + i * 13;
+            const capNetto = currentResults.fondoNetto * sc.cap / 100;
+            const montRend = currentResults.fondoNetto * sc.rend / 100;
+            const renditaMens = (montRend * coeff) / 13;
+            doc.setFontSize(8.5); doc.setFont(undefined,'bold'); doc.setTextColor(...blu);
+            doc.text(sc.lbl, M+4, ry+5);
+            doc.setFont(undefined,'normal'); doc.setTextColor(30,41,59); doc.setFontSize(8);
+            if (sc.cap > 0)  doc.text(`Assegno subito: ${fmtMoney(capNetto)}`, M+4, ry+10);
+            if (sc.rend > 0) doc.text(`Rendita mensile lorda: ${fmtMoney(renditaMens)}/mese`, sc.cap > 0 ? W/2+4 : M+4, ry+10);
+        });
+        y += scenarios.length * 13 + 18;
+    }
+
+    // ---- NOTE TECNICHE ----
+    {
+        const noteLines = [
+            `Ipotesi di calcolo: rendimento fondo ${parametri.fondo_rendimento_stimato}% lordo (tassazione rendite ${parametri.tassazione_rendite_fondo}%); TFR rivalutato al ${parametri.tfr_rendimento_stimato}%; investimento alternativo ${parametri.investimento_privato_rendimento}% lordo (tassazione ${parametri.tassazione_rendite_privato}%).`,
+            `Aliquote IRPEF 2025 applicate: 23% (≤28.000 €), 35% (≤50.000 €), 43% (oltre). Aliquota TFR separata: marginale − 4% (min. 23%).`,
+            `Il report è generato in automatico e ha scopo esclusivamente illustrativo. Per una consulenza personalizzata contattare il proprio consulente finanziario.`,
+        ];
+        doc.setFillColor(252,252,252); doc.roundedRect(M, y, W-M*2, 28, 2, 2, 'F');
+        doc.setDrawColor(200,210,220); doc.setLineWidth(0.15); doc.roundedRect(M, y, W-M*2, 28, 2, 2, 'S');
+        doc.setTextColor(120,130,140); doc.setFontSize(7); doc.setFont(undefined,'normal');
+        noteLines.forEach((n, i) => {
+            const wrapped = doc.splitTextToSize(n, W-M*2-8);
+            doc.text(wrapped, M+4, y+5+i*9);
+        });
+    }
+
+    drawFooter(2, 2);
 
     return doc;
 }
