@@ -1,38 +1,19 @@
-import io
+import base64
+import binascii
 import os
-from datetime import datetime
-from typing import List
+import smtplib
+from email.message import EmailMessage
+from typing import Optional
 
 import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+from pydantic import BaseModel, EmailStr, Field
 
 
-class PensionInput(BaseModel):
-    current_age: int = Field(..., ge=18, le=75)
-    retirement_age: int = Field(..., ge=45, le=80)
-    monthly_contribution: float = Field(..., gt=0)
-    annual_return_rate: float = Field(..., ge=0, le=20)
-    current_capital: float = Field(0, ge=0)
-
-
-class ProjectionPoint(BaseModel):
-    age: int
-    estimated_capital: float
-
-
-class ProjectionResult(BaseModel):
-    projected_capital: float
-    years_to_retirement: int
-    points: List[ProjectionPoint]
-
-
-app = FastAPI(title="Vantaggio Pensione API", version="1.0.0")
+app = FastAPI(title="Vantaggio Pensione", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,152 +26,131 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-def project_capital(payload: PensionInput) -> ProjectionResult:
-    years = payload.retirement_age - payload.current_age
-    if years <= 0:
-        raise HTTPException(status_code=400, detail="L'età pensionabile deve essere maggiore dell'età attuale.")
-
-    annual_contrib = payload.monthly_contribution * 12
-    capital = payload.current_capital
-    points: list[ProjectionPoint] = []
-
-    for i in range(1, years + 1):
-        capital = (capital + annual_contrib) * (1 + payload.annual_return_rate / 100)
-        points.append(ProjectionPoint(age=payload.current_age + i, estimated_capital=round(capital, 2)))
-
-    return ProjectionResult(
-        projected_capital=round(capital, 2),
-        years_to_retirement=years,
-        points=points,
-    )
-
-
-def generate_commentary_with_gemini(payload: PensionInput, projection: ProjectionResult) -> str:
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return (
-            "Analisi automatica non disponibile: imposta GEMINI_API_KEY per ricevere una sintesi AI. "
-            "La proiezione numerica è comunque stata calcolata correttamente."
-        )
-
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-
-    prompt = f"""
-    Genera un breve report in italiano (max 220 parole) su questa simulazione pensionistica.
-    Usa tono professionale e chiaro.
-
-    Dati cliente:
-    - Età attuale: {payload.current_age}
-    - Età pensionamento: {payload.retirement_age}
-    - Contributo mensile: {payload.monthly_contribution:.2f} EUR
-    - Rendimento annuo stimato: {payload.annual_return_rate:.2f}%
-    - Capitale attuale: {payload.current_capital:.2f} EUR
-
-    Risultati simulazione:
-    - Anni alla pensione: {projection.years_to_retirement}
-    - Capitale stimato finale: {projection.projected_capital:.2f} EUR
-
-    Struttura il testo in:
-    1) Sintesi
-    2) Punti di forza
-    3) Rischi/attenzioni
-    4) Azioni consigliate
-    """
-
-    try:
-        response = model.generate_content(prompt)
-        return (response.text or "Nessun testo restituito dal modello.").strip()
-    except Exception as exc:
-        return f"Errore durante la generazione AI: {exc}"
-
-
-def build_pdf(payload: PensionInput, projection: ProjectionResult, ai_commentary: str) -> io.BytesIO:
-    buffer = io.BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=A4)
-
-    x_margin = 50
-    y = 800
-
-    pdf.setFont("Helvetica-Bold", 18)
-    pdf.drawString(x_margin, y, "Report Previdenziale - Vantaggio Pensione")
-    y -= 28
-
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(x_margin, y, f"Data generazione: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
-    y -= 30
-
-    lines = [
-        f"Età attuale: {payload.current_age}",
-        f"Età pensionamento: {payload.retirement_age}",
-        f"Contributo mensile: EUR {payload.monthly_contribution:,.2f}",
-        f"Rendimento annuo stimato: {payload.annual_return_rate:.2f}%",
-        f"Capitale attuale: EUR {payload.current_capital:,.2f}",
-        f"Anni alla pensione: {projection.years_to_retirement}",
-        f"Capitale finale stimato: EUR {projection.projected_capital:,.2f}",
-    ]
-
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(x_margin, y, "Riepilogo numerico")
-    y -= 20
-
-    pdf.setFont("Helvetica", 11)
-    for line in lines:
-        pdf.drawString(x_margin, y, line)
-        y -= 18
-
-    y -= 10
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(x_margin, y, "Commento AI (Gemini)")
-    y -= 20
-    pdf.setFont("Helvetica", 10)
-
-    for paragraph in ai_commentary.split("\n"):
-        if not paragraph.strip():
-            y -= 10
-            continue
-
-        words = paragraph.split()
-        current_line = ""
-        for word in words:
-            candidate = f"{current_line} {word}".strip()
-            if pdf.stringWidth(candidate, "Helvetica", 10) < 500:
-                current_line = candidate
-            else:
-                pdf.drawString(x_margin, y, current_line)
-                y -= 14
-                current_line = word
-                if y < 70:
-                    pdf.showPage()
-                    pdf.setFont("Helvetica", 10)
-                    y = 800
-
-        if current_line:
-            pdf.drawString(x_margin, y, current_line)
-            y -= 14
-
-    pdf.save()
-    buffer.seek(0)
-    return buffer
-
-
 @app.get("/", response_class=HTMLResponse)
 def index() -> FileResponse:
     return FileResponse("static/index.html")
 
 
-@app.post("/api/projection", response_model=ProjectionResult)
-def projection(payload: PensionInput) -> ProjectionResult:
-    return project_capital(payload)
+# ===================== GEMINI PROXY =====================
+
+class GeminiRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000)
 
 
-@app.post("/api/report")
-def report(payload: PensionInput) -> StreamingResponse:
-    projection_data = project_capital(payload)
-    commentary = generate_commentary_with_gemini(payload, projection_data)
-    pdf_bytes = build_pdf(payload, projection_data, commentary)
-    return StreamingResponse(
-        pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=report-previdenziale.pdf"},
+@app.post("/api/gemini")
+def gemini_proxy(payload: GeminiRequest) -> dict:
+    """Proxy verso Gemini. Risposta nel formato atteso dal frontend:
+    { candidates: [ { content: { parts: [ { text } ] } } ] }
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return {"error": {"message": "GEMINI_API_KEY non configurata sul server."}}
+
+    genai.configure(api_key=api_key)
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(payload.message)
+        text = (response.text or "").strip()
+    except Exception as exc:  # pragma: no cover - dipende da rete
+        return {"error": {"message": f"Errore Gemini: {exc}"}}
+
+    return {
+        "candidates": [
+            {"content": {"parts": [{"text": text or "Nessuna risposta."}]}}
+        ]
+    }
+
+
+# ===================== INVIO REPORT =====================
+
+class SendReportRequest(BaseModel):
+    nome: str = Field(..., min_length=1, max_length=120)
+    cognome: str = Field(..., min_length=1, max_length=120)
+    telefono: str = Field(..., min_length=4, max_length=40)
+    email: EmailStr
+    vantaggio: str = Field("", max_length=80)
+    pdf: str = Field(..., description="PDF in base64 (senza prefisso data URI)")
+
+
+def _smtp_config() -> Optional[dict]:
+    host = os.getenv("SMTP_HOST")
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASS")
+    if not (host and user and password):
+        return None
+    return {
+        "host": host,
+        "port": int(os.getenv("SMTP_PORT", "587")),
+        "user": user,
+        "password": password,
+        "use_ssl": os.getenv("SMTP_SSL", "false").lower() in {"1", "true", "yes"},
+        "from_addr": os.getenv("SMTP_FROM", user),
+        "from_name": os.getenv("SMTP_FROM_NAME", "Vantaggio Pensione"),
+        "owner_bcc": os.getenv("SMTP_OWNER_EMAIL"),
+    }
+
+
+def _build_email(cfg: dict, payload: SendReportRequest, pdf_bytes: bytes) -> EmailMessage:
+    msg = EmailMessage()
+    msg["Subject"] = "Il tuo Report Previdenziale personalizzato"
+    msg["From"] = f"{cfg['from_name']} <{cfg['from_addr']}>"
+    msg["To"] = payload.email
+    if cfg.get("owner_bcc"):
+        msg["Bcc"] = cfg["owner_bcc"]
+
+    msg.set_content(
+        f"Ciao {payload.nome},\n\n"
+        f"in allegato trovi il tuo report previdenziale personalizzato.\n"
+        f"Vantaggio netto stimato: {payload.vantaggio or 'vedi report'}.\n\n"
+        f"Per qualsiasi domanda puoi rispondere a questa email.\n\n"
+        f"— Domenico Mosca, Consulente Finanziario FinecoBank"
     )
+    msg.add_alternative(
+        f"""
+        <p>Ciao <strong>{payload.nome}</strong>,</p>
+        <p>in allegato trovi il tuo <strong>report previdenziale personalizzato</strong>.</p>
+        <p>Vantaggio netto stimato: <strong>{payload.vantaggio or 'vedi report'}</strong>.</p>
+        <p>Per qualsiasi domanda puoi rispondere a questa email.</p>
+        <p>— Domenico Mosca, Consulente Finanziario FinecoBank</p>
+        """,
+        subtype="html",
+    )
+
+    filename = f"Report_Previdenziale_{payload.nome}_{payload.cognome}.pdf".replace(" ", "_")
+    msg.add_attachment(pdf_bytes, maintype="application", subtype="pdf", filename=filename)
+    return msg
+
+
+@app.post("/api/send-report")
+def send_report(payload: SendReportRequest) -> dict:
+    try:
+        pdf_bytes = base64.b64decode(payload.pdf, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="PDF non valido (atteso base64).")
+
+    if not pdf_bytes.startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="L'allegato non è un PDF.")
+
+    cfg = _smtp_config()
+    if cfg is None:
+        return {
+            "success": False,
+            "error": "Server email non configurato. Imposta SMTP_HOST, SMTP_USER, SMTP_PASS.",
+        }
+
+    msg = _build_email(cfg, payload, pdf_bytes)
+
+    try:
+        if cfg["use_ssl"]:
+            with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=30) as server:
+                server.login(cfg["user"], cfg["password"])
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(cfg["host"], cfg["port"], timeout=30) as server:
+                server.starttls()
+                server.login(cfg["user"], cfg["password"])
+                server.send_message(msg)
+    except Exception as exc:  # pragma: no cover - dipende da rete
+        return {"success": False, "error": f"Invio email fallito: {exc}"}
+
+    return {"success": True}
