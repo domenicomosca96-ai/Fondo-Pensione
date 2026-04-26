@@ -1,139 +1,58 @@
-# Vantaggio Pensione - Dashboard + Backend
+# Vantaggio Pensione
 
-Applicazione web completa per:
-- simulare il capitale pensionistico,
-- visualizzarlo in una dashboard con grafico,
-- scaricare un **report PDF reale** con commento AI (Gemini).
+Calcolatore previdenziale lead-gated:
 
----
+1. **Calcolo** — l'utente compila il form (profilo dipendente/professionista, età, reddito, contributi) e vede **solo** il numero del Vantaggio Netto Stimato. Il resto dell'analisi è oscurato dietro un'anteprima sfumata.
+2. **Form lead** — per sbloccare il dettaglio l'utente inserisce nome, cognome, cellulare, email e accetta la privacy.
+3. **Sblocco + email** — al submit:
+   - viene generato lato client un **PDF personalizzato** (jsPDF) con header gradient, confronto scenari, donut delle componenti del vantaggio e profilo;
+   - il PDF viene inviato al backend (`/api/send-report`) che lo recapita all'email del cliente via SMTP;
+   - la pagina sblocca grafici Chart.js, l'analisi AI Gemini e il pannello rendita/capitale.
 
-## 1) Cosa hai già pronto
-Questa repo contiene già tutto:
-- backend FastAPI (`app/main.py`),
-- frontend dashboard (`static/`),
-- endpoint PDF (`POST /api/report`),
-- container (`Dockerfile`).
+## Architettura
 
-Il bottone **"Scarica Report PDF"** chiama il backend e scarica il file PDF generato al momento.
+- **Frontend**: `static/index.html` (Tailwind CDN, Chart.js, jsPDF) — pagina singola con tre stati (`idle` → `calculated` → `unlocked`).
+- **Backend**: FastAPI (`app/main.py`) con due endpoint:
+  - `POST /api/gemini` — proxy verso Gemini (`{ message }` → formato `{ candidates: [...] }`);
+  - `POST /api/send-report` — riceve dati lead + PDF base64, invia email con allegato via SMTP.
 
----
-
-## 2) Setup locale (super facile)
-Apri terminale dentro la repo e fai questi comandi in ordine:
+## Setup locale
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-export GEMINI_API_KEY="INCOLLA_QUI_LA_TUA_CHIAVE_GEMINI"
+cp .env.example .env  # poi compila le variabili
+export $(grep -v '^#' .env | xargs)
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Poi apri nel browser:
+Apri `http://localhost:8000`.
 
-```text
-http://localhost:8000
-```
+## Variabili d'ambiente
 
-### Test rapido
-1. Inserisci i valori nel form.
-2. Clicca **Calcola Dashboard** (devi vedere metriche + grafico aggiornato).
-3. Clicca **Scarica Report PDF** (deve partire il download del PDF).
+| Variabile | Obbligatoria | Descrizione |
+|---|---|---|
+| `GEMINI_API_KEY` | per AI | Chiave Google Gemini. Senza, l'analisi AI restituisce errore ma il calcolo e il PDF restano operativi. |
+| `SMTP_HOST` | per email | Host SMTP (es. `smtps.aruba.it`). |
+| `SMTP_PORT` | per email | Porta (default `587`). |
+| `SMTP_USER` / `SMTP_PASS` | per email | Credenziali. |
+| `SMTP_SSL` | no | `true` per SSL diretto (porta 465); altrimenti STARTTLS. |
+| `SMTP_FROM` | no | Mittente (default = `SMTP_USER`). |
+| `SMTP_FROM_NAME` | no | Nome visualizzato (default `Vantaggio Pensione`). |
+| `SMTP_OWNER_EMAIL` | no | Bcc del consulente. |
 
----
+Senza configurazione SMTP l'app continua a funzionare: il modale segnala l'errore di invio e l'utente può comunque scaricare il PDF dal pulsante.
 
-## 3) Deploy reale (consigliato: Render)
-Qui trovi i passaggi esatti, uno per uno.
+## Deploy (Render)
 
-### Step A — prepara GitHub
-1. Crea un nuovo repository su GitHub.
-2. Pusha questo progetto su GitHub.
+- **Build**: `pip install -r requirements.txt`
+- **Start**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Imposta le variabili d'ambiente sopra in **Environment**.
 
-### Step B — crea servizio su Render
-1. Vai su [https://render.com](https://render.com).
-2. Login / registrazione.
-3. Clicca **New +** → **Web Service**.
-4. Seleziona il repository GitHub del progetto.
+## Container
 
-### Step C — configura il servizio
-Compila così:
-- **Runtime**: Python 3
-- **Build Command**:
-  ```bash
-  pip install -r requirements.txt
-  ```
-- **Start Command**:
-  ```bash
-  uvicorn app.main:app --host 0.0.0.0 --port $PORT
-  ```
-
-### Step D — inserisci la chiave Gemini
-Nella sezione **Environment Variables** aggiungi:
-- `GEMINI_API_KEY` = la tua chiave Gemini
-
-### Step E — deploy
-1. Clicca **Create Web Service**.
-2. Aspetta il completamento build/deploy.
-3. Render ti dà un URL pubblico (esempio: `https://nome-app.onrender.com`).
-
-### Step F — verifica in produzione
-1. Apri URL pubblico.
-2. Compila il form.
-3. Clicca **Calcola Dashboard**.
-4. Clicca **Scarica Report PDF**.
-5. Controlla che il PDF venga scaricato davvero.
-
----
-
-## 4) Come funziona il PDF (dietro le quinte)
-Quando clicchi il bottone:
-1. Frontend invia i dati a `POST /api/report`.
-2. Backend calcola la proiezione.
-3. Backend chiede a Gemini il testo del report.
-4. Backend crea PDF con ReportLab.
-5. Browser riceve e scarica il file.
-
----
-
-## 5) Errori comuni e soluzione immediata
-
-### Errore: "Analisi automatica non disponibile"
-Causa: manca `GEMINI_API_KEY`.
-Soluzione: aggiungi la variabile ambiente (locale o Render) e riavvia il servizio.
-
-### Errore in deploy: app non parte
-Controlla che lo Start Command sia ESATTAMENTE:
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
-
-### Il PDF non si scarica
-- Apri DevTools → tab Network e controlla `/api/report`.
-- Se status non è `200`, leggi log backend su Render.
-
----
-
-## 6) Sicurezza (importante)
-- Non salvare la chiave Gemini direttamente nel codice.
-- Usa solo variabili d'ambiente.
-- Se una chiave è stata condivisa pubblicamente, rigenerala dal provider.
-
----
-
-## 7) Comandi utili veloci
-
-Eseguire in locale:
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Build container locale:
 ```bash
 docker build -t vantaggio-pensione .
-```
-
-Run container locale:
-```bash
-docker run -p 8000:8000 -e GEMINI_API_KEY="LA_TUA_CHIAVE" vantaggio-pensione
+docker run -p 8000:8000 --env-file .env vantaggio-pensione
 ```
