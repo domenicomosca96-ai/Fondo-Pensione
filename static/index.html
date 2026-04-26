@@ -921,6 +921,31 @@ function generatePDF() {
     doc.text(`${sign}${fmtPerc(percV)}`, W-34, y+24, {align:'center'});
     y += 38;
 
+    // SEZIONE DESCRITTIVA: spiega da dove deriva il vantaggio
+    {
+        const profiloLbl = isFreelance ? (isForfettario ? 'Professionista Forfettario' : 'Professionista Ordinario') : 'Dipendente';
+        const datoreEuroAnno = currentResults.ral * (currentResults.percDatore || 0) / 100;
+        const parts = [];
+        parts.push(`Profilo ${profiloLbl}, orizzonte ${currentResults.anni} anni: il vantaggio totale di ${sign}${fmtMoney(currentResults.vantaggioTotale)} deriva dalla somma di quattro componenti.`);
+        parts.push(`(1) Risparmio fiscale cumulato sulle deduzioni IRPEF dei versamenti: ${fmtMoney(Math.max(0, currentResults.risparmioFiscaleCash))}.`);
+        parts.push(`(2) Maggiori rendimenti netti del fondo (${parametri.fondo_rendimento_stimato}% lordo, tassazione ${parametri.tassazione_rendite_fondo}%) rispetto all'investimento alternativo: ${fmtMoney(Math.max(0, currentResults.visualRendimenti))}.`);
+        parts.push(`(3) Vantaggio della tassazione finale agevolata sul fondo (aliquota ${currentResults.aliquotaFinaleFondo.toFixed(1)}%) rispetto alla tassazione separata standard: ${fmtMoney(Math.max(0, currentResults.visualTasse))}.`);
+        if (!isFreelance && datoreEuroAnno > 0) {
+            parts.push(`(4) Contributo del datore di lavoro versato gratuitamente al fondo (${currentResults.percDatore}% della RAL ≈ ${fmtMoney(datoreEuroAnno)}/anno), per un valore netto finale di ${fmtMoney(Math.max(0, currentResults.valoreNettoDatore))}.`);
+        } else {
+            parts.push(`(4) Contributo del datore: non applicabile per il profilo selezionato (${fmtMoney(0)}).`);
+        }
+        const descrText = parts.join(' ');
+        doc.setFillColor(248,250,252); doc.roundedRect(14, y, W-28, 32, 3, 3, 'F');
+        doc.setDrawColor(...teal); doc.setLineWidth(0.2); doc.roundedRect(14, y, W-28, 32, 3, 3, 'S');
+        doc.setTextColor(...blu); doc.setFontSize(10); doc.setFont(undefined, 'bold');
+        doc.text('Da dove deriva il tuo vantaggio', 18, y+6);
+        doc.setFont(undefined, 'normal'); doc.setFontSize(8.5); doc.setTextColor(55,65,81);
+        const wrapped = doc.splitTextToSize(descrText, W-36);
+        doc.text(wrapped, 18, y+11);
+        y += 36;
+    }
+
     // BAR CHART - confronto scenari
     doc.setTextColor(...blu); doc.setFontSize(13); doc.setFont(undefined, 'bold');
     doc.text('Confronto Scenari', 14, y); y += 3;
@@ -949,12 +974,6 @@ function generatePDF() {
     doc.setFontSize(8); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
     doc.text('Fondo Pensione', chartX+chartW*0.7, y+chartH+5, {align:'center'});
     y += chartH + 14;
-
-    // Profilo
-    doc.setTextColor(...blu); doc.setFontSize(13); doc.setFont(undefined, 'bold');
-    doc.text('Il tuo Profilo', 14, y); y += 6;
-    doc.setLineWidth(0.3); doc.setDrawColor(...teal);
-    doc.line(14, y, W-14, y); y += 6;
 
     // PROFILO in 2 colonne
     doc.setTextColor(...blu); doc.setFontSize(13); doc.setFont(undefined, 'bold');
@@ -993,37 +1012,42 @@ function generatePDF() {
         {lbl:'Risparmio Fiscale',      val: Math.max(0,currentResults.risparmioFiscaleCash), col: ARANCIO},
         {lbl:'Maggiori Rendimenti',    val: Math.max(0,currentResults.visualRendimenti),     col: CIANO},
         {lbl:'Vantaggio Tass. Finale', val: Math.max(0,currentResults.visualTasse),          col: INDACO},
-        {lbl:'Contr. Datore',          val: Math.max(0,currentResults.valoreNettoDatore),    col: AZZURRO},
+        {lbl:'Contributo Datore',      val: Math.max(0,currentResults.valoreNettoDatore),    col: AZZURRO},
     ];
-    const tot = segs.reduce((s,x)=>s+x.val, 0) || 1;
+    const totSegs = segs.reduce((s,x)=>s+x.val, 0);
+    const tot = totSegs || 1;
 
     // Donut: centro a (45, y+30), raggio 22
     const cx = 45, cy = y+28, rOut = 22, rIn = 13;
     let ang = -Math.PI/2;
-    segs.forEach(s => {
-        const span = (s.val/tot) * Math.PI*2;
-        if (span < 0.001) return;
-        // Approssimazione arco con triangoli
-        const steps = Math.max(3, Math.ceil(span / 0.1));
-        doc.setFillColor(...s.col);
-        for (let i=0; i<steps; i++) {
-            const a1 = ang + (span*i/steps), a2 = ang + (span*(i+1)/steps);
-            doc.triangle(
-                cx+Math.cos(a1)*rOut, cy+Math.sin(a1)*rOut,
-                cx+Math.cos(a2)*rOut, cy+Math.sin(a2)*rOut,
-                cx, cy, 'F'
-            );
-        }
-        ang += span;
-    });
+    if (totSegs > 0) {
+        segs.forEach(s => {
+            const span = (s.val/tot) * Math.PI*2;
+            if (span <= 0) return;
+            const steps = Math.max(3, Math.ceil(span / 0.1));
+            doc.setFillColor(...s.col);
+            for (let i=0; i<steps; i++) {
+                const a1 = ang + (span*i/steps), a2 = ang + (span*(i+1)/steps);
+                doc.triangle(
+                    cx+Math.cos(a1)*rOut, cy+Math.sin(a1)*rOut,
+                    cx+Math.cos(a2)*rOut, cy+Math.sin(a2)*rOut,
+                    cx, cy, 'F'
+                );
+            }
+            ang += span;
+        });
+    } else {
+        // Placeholder grigio se tutti i valori sono 0
+        doc.setFillColor(229,231,235); doc.circle(cx, cy, rOut, 'F');
+    }
     // Hole
     doc.setFillColor(...bianco); doc.circle(cx, cy, rIn, 'F');
     doc.setTextColor(...blu); doc.setFontSize(9); doc.setFont(undefined,'bold');
     doc.text('TOTALE', cx, cy-2, {align:'center'});
     doc.setFontSize(10);
-    doc.text(fmtMoney(tot), cx, cy+4, {align:'center'});
+    doc.text(fmtMoney(totSegs), cx, cy+4, {align:'center'});
 
-    // Legenda
+    // Legenda — sempre tutte e 4 le voci
     const lx = 80;
     segs.forEach((s, i) => {
         const ly = y + 6 + i*11;
@@ -1033,7 +1057,8 @@ function generatePDF() {
         doc.setFont(undefined,'bold'); doc.setTextColor(30,41,59);
         doc.text(fmtMoney(s.val), W-18, ly, {align:'right'});
         doc.setFont(undefined,'normal'); doc.setTextColor(...grigio); doc.setFontSize(7);
-        doc.text(`${((s.val/tot)*100).toFixed(1)}%`, W-18, ly+4, {align:'right'});
+        const pct = totSegs > 0 ? (s.val/totSegs)*100 : 0;
+        doc.text(`${pct.toFixed(1)}%`, W-18, ly+4, {align:'right'});
     });
     y += 60;
 
