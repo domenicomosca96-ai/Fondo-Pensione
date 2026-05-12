@@ -19,8 +19,7 @@ return [
 
     // ====== SMTP ======
     // Compila per usare PHPMailer + SMTP autenticato (consigliato).
-    // Lascia vuoto SMTP_HOST per usare il fallback mail() di PHP
-    // (funziona su Aruba/sendmail ma con deliverability inferiore).
+    // Lascia vuoto SMTP_HOST per usare il fallback mail() di PHP.
 
     'SMTP_HOST' => '',                            // es. 'smtps.aruba.it'  o  'smtp.gmail.com'
     'SMTP_PORT' => 587,                           // 587 STARTTLS  |  465 SSL
@@ -34,11 +33,29 @@ return [
     'MITTENTE_NOME'  => 'Vantaggio Pensione',
 
     // ====== Copia consulente ======
-    'BCC_CONSULENTE' => 'domenico.mosca@pfafineco.it', // ricevi una copia di ogni lead. Lascia '' per disabilitare.
+    'BCC_CONSULENTE' => '',                       // ricevi una copia di ogni lead. Lascia '' per disabilitare.
 
-    // ====== Brand consulente (mostrato nell'email) ======
+    // ====== Brand consulente (mostrato nel calcolatore, nel PDF e nell'email) ======
+    // ATTENZIONE: ADVISOR_NAME e ADVISOR_TITLE compaiono ANCHE nel testo del
+    // consenso privacy del form. Devono identificare il VERO data controller.
     'ADVISOR_NAME'   => 'Domenico Mosca',
     'ADVISOR_TITLE'  => 'Consulente Finanziario FinecoBank',
     'ADVISOR_PHONE'  => '331 7849240',
     'ADVISOR_EMAIL'  => 'domenico.mosca@pfafineco.it',
+
+    // ====== Anti-abuse (P1) ======
+    // Lista degli host autorizzati a chiamare invia-report.php / gemini-proxy.php.
+    // Lascia [] per consentire tutto (sviluppo). In produzione COMPILA SEMPRE
+    // con il dominio del sito che ospita il calcolatore.
+    'ALLOWED_ORIGINS' => [
+        // 'https://www.tuodominio.it',
+        // 'https://tuodominio.it',
+    ],
+
+    // Rate-limit per IP, sliding window 1h. 0 = disabilitato.
+    'RATE_LIMIT_MAX_PER_HOUR'        => 5,        // POST /invia-report.php (invio email)
+    'RATE_LIMIT_MAX_PER_HOUR_GEMINI' => 20,       // POST /gemini-proxy.php (AI)
+
+    // Cap dimensione PDF (byte). Default 3 MB. Scarta payload più grandi.
+    'PDF_MAX_BYTES' => 3 * 1024 * 1024,
 ];

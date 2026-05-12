@@ -6,6 +6,7 @@ __pycache__/
 # Bundle portabile PHP
 portable/config.php
 portable/invia-report.log
+portable/rate-limit.json
 portable/vendor/
 portable/PHPMailer/
 portable/composer.lock

@@ -1,3 +1,22 @@
+<?php
+/**
+ * index.php — Calcolatore Vantaggio Pensione (bundle portabile)
+ *
+ * Renderizza il calcolatore iniettando il branding consulente da config.php
+ * (P2 review Codex: il testo della privacy DEVE corrispondere al data
+ * controller reale che riceverà i lead).
+ */
+declare(strict_types=1);
+$cfg = file_exists(__DIR__ . '/config.php') ? require __DIR__ . '/config.php' : [];
+
+$ADV_NAME  = (string)($cfg['ADVISOR_NAME']  ?? 'Domenico Mosca');
+$ADV_TITLE = (string)($cfg['ADVISOR_TITLE'] ?? 'Consulente Finanziario FinecoBank');
+$ADV_PHONE = (string)($cfg['ADVISOR_PHONE'] ?? '');
+$ADV_EMAIL = (string)($cfg['ADVISOR_EMAIL'] ?? '');
+$BRAND_TITLE = "{$ADV_NAME} — {$ADV_TITLE}";
+
+function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
+?>
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -29,6 +48,17 @@
         .blur-content { filter: blur(2.5px); opacity: .85; user-select: none; pointer-events: none; }
         .gate-overlay { background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 70%, rgba(255,255,255,.6) 88%, rgba(255,255,255,.92) 100%); }
     </style>
+    <title><?= h($BRAND_TITLE) ?> — Calcolatore Vantaggio Pensione</title>
+    <script>
+        // Branding consulente iniettato lato server (config.php).
+        // Usato per testo del consenso, PDF e firma email.
+        window.ADVISOR = <?= json_encode([
+            'name'  => $ADV_NAME,
+            'title' => $ADV_TITLE,
+            'phone' => $ADV_PHONE,
+            'email' => $ADV_EMAIL,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    </script>
 </head>
 <body class="antialiased text-gray-800 flex flex-col min-h-screen">
 
@@ -257,6 +287,11 @@
                         </div>
 
                         <form id="lead-form" class="space-y-4" novalidate>
+                            <!-- Honeypot anti-bot: invisibile agli utenti, i bot lo riempiono → server rigetta -->
+                            <div aria-hidden="true" style="position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;opacity:0">
+                                <label for="lead-hp">Lascia vuoto questo campo</label>
+                                <input type="text" id="lead-hp" name="hp" tabindex="-1" autocomplete="off">
+                            </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label for="lead-nome" class="block text-sm font-medium text-gray-700 mb-1">Nome <span class="text-red-500">*</span></label>
@@ -290,7 +325,7 @@
                                 <input type="checkbox" id="lead-privacy" required
                                     class="mt-0.5 h-4 w-4 text-[#005A78] focus:ring-[#005A78] border-gray-300 rounded cursor-pointer flex-shrink-0">
                                 <label for="lead-privacy" class="text-xs text-gray-600 cursor-pointer leading-relaxed">
-                                    Ho letto e accetto la <a href="#" class="text-[#005A78] underline font-medium">Privacy Policy</a>. Acconsento al trattamento dei miei dati personali da parte di <strong>Domenico Mosca</strong> (Consulente FinecoBank) per ricevere il report previdenziale personalizzato e per essere ricontattato.
+                                    Ho letto e accetto la <a href="#" class="text-[#005A78] underline font-medium">Privacy Policy</a>. Acconsento al trattamento dei miei dati personali da parte di <strong><?= h($ADV_NAME) ?></strong> (<?= h($ADV_TITLE) ?>) per ricevere il report previdenziale personalizzato e per essere ricontattato.
                                 </label>
                             </div>
                             <p class="text-red-500 text-xs hidden" id="err-privacy">Devi accettare la privacy policy per continuare</p>
@@ -847,7 +882,9 @@ document.getElementById('lead-form').addEventListener('submit', async function(e
                 telefono: leadData.telefono,
                 email: leadData.email,
                 vantaggio: fmtMoney(currentResults.vantaggioTotale),
-                pdf: pdfBase64
+                pdf: pdfBase64,
+                privacy_consent: document.getElementById('lead-privacy').checked === true,
+                hp: (document.getElementById('lead-hp')?.value ?? '')
             })
         });
         const data = await res.json();
@@ -875,7 +912,7 @@ document.getElementById('lead-form').addEventListener('submit', async function(e
             const isDebug = new URLSearchParams(location.search).get('debug') === '1';
             let html =
                 '<div class="text-amber-700 font-semibold">\u26a0 Invio email temporaneamente non disponibile.</div>' +
-                '<div class="text-xs text-gray-500 mt-1">Puoi scaricare il PDF qui sotto. Per assistenza scrivi a <strong>domenico.mosca@pfafineco.it</strong>.</div>';
+                '<div class="text-xs text-gray-500 mt-1">Puoi scaricare il PDF qui sotto. Per assistenza scrivi a <strong>' + ((window.ADVISOR && window.ADVISOR.email) || 'il consulente') + '</strong>.</div>';
             if (isDebug) {
                 const safeErr = String(emailError || 'Errore sconosciuto')
                     .replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
@@ -902,6 +939,18 @@ function generatePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
+    // ---- BRAND (da window.ADVISOR / config.php) ----
+    const ADV = (window.ADVISOR && typeof window.ADVISOR === 'object') ? window.ADVISOR : {};
+    const ADV_NAME  = ADV.name  || 'Domenico Mosca';
+    const ADV_TITLE = ADV.title || 'Consulente Finanziario FinecoBank';
+    const ADV_PHONE = ADV.phone || '';
+    const ADV_EMAIL = ADV.email || '';
+    const ADV_BAR_FULL = ADV_NAME + ' | ' + ADV_TITLE;
+    const ADV_HEADER_LINE =
+        ADV_NAME + ' — ' + ADV_TITLE +
+        (ADV_PHONE ? '  ·  Tel. ' + ADV_PHONE : '') +
+        (ADV_EMAIL ? '  ·  ' + ADV_EMAIL : '');
+
     // ---- PALETTE ----
     const blu    = [0,59,92];
     const teal   = [0,90,120];
@@ -926,7 +975,7 @@ function generatePDF() {
         doc.rect(0, FOOTER_Y, W, 20, 'F');
         doc.setTextColor(...bianco);
         doc.setFontSize(8.5); doc.setFont(undefined, 'bold');
-        doc.text('Domenico Mosca | Consulente Finanziario FinecoBank', W/2, FOOTER_Y + 7, {align:'center'});
+        doc.text(ADV_BAR_FULL, W/2, FOOTER_Y + 7, {align:'center'});
         doc.setFont(undefined, 'normal'); doc.setFontSize(6.5);
         doc.text(
             'Simulazione a scopo informativo. Non costituisce consulenza finanziaria ai sensi del D.Lgs. 58/98. Dati soggetti a variazioni normative.',
@@ -995,7 +1044,7 @@ function generatePDF() {
     doc.setFontSize(10); doc.setFont(undefined, 'normal');
     doc.text(`${leadData.nome} ${leadData.cognome}  ·  ${new Date().toLocaleDateString('it-IT')}`, W/2, 28, {align:'center'});
     doc.setFontSize(8);
-    doc.text('Domenico Mosca — Consulente Finanziario FinecoBank  ·  Tel. 331 7849240  ·  domenico.mosca@pfafineco.it', W/2, 43, {align:'center'});
+    doc.text(ADV_HEADER_LINE, W/2, 43, {align:'center'});
 
     let y = 58;
 
@@ -1276,9 +1325,12 @@ function generatePDF() {
         doc.setTextColor(...bianco); doc.setFontSize(11); doc.setFont(undefined, 'bold');
         doc.text('Vuoi approfondire? Parliamone.', W/2, boxY+8, {align:'center'});
         doc.setFont(undefined, 'normal'); doc.setFontSize(9);
-        doc.text('Domenico Mosca — Consulente Finanziario FinecoBank', W/2, boxY+14, {align:'center'});
+        doc.text(ADV_NAME + ' — ' + ADV_TITLE, W/2, boxY+14, {align:'center'});
         doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(194,217,255);
-        doc.text(`Tel. 331 7849240   ·   domenico.mosca@pfafineco.it`, W/2, boxY+21, {align:'center'});
+        const contactBits = [];
+        if (ADV_PHONE) contactBits.push('Tel. ' + ADV_PHONE);
+        if (ADV_EMAIL) contactBits.push(ADV_EMAIL);
+        doc.text(contactBits.join('   ·   '), W/2, boxY+21, {align:'center'});
     }
 
     drawFooter(3, 3);

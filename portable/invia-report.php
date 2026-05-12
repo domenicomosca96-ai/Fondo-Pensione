@@ -3,27 +3,30 @@
  * invia-report.php — Invio del Report Previdenziale via email
  *
  * Riceve dal frontend (POST JSON):
- *   nome, cognome, telefono, email, vantaggio, pdf (base64)
+ *   nome, cognome, telefono, email, vantaggio, pdf (base64),
+ *   privacy_consent (bool, OBBLIGATORIO), hp (honeypot, deve essere "")
  * Risponde:
  *   { "success": true }   |   { "success": false, "error": "..." }
  *
- * Modalità di invio (in ordine di preferenza):
- *   1. PHPMailer + SMTP (se i parametri SMTP sono compilati in config.php)
- *      → consigliato: funziona con Aruba/Gmail/qualsiasi SMTP autenticato
- *   2. mail() di PHP (fallback)
- *      → funziona "out of the box" sui mailserver locali (Aruba sendmail)
- *        ma è meno affidabile in deliverability
+ * SICUREZZA — anti-abuse layers (richieste dal review Codex P1):
+ *   1) Origin/Referer check vs ALLOWED_ORIGINS (config)
+ *   2) Rate-limit per IP (RATE_LIMIT_MAX_PER_HOUR, file-based)
+ *   3) Consenso privacy obbligatorio (privacy_consent === true)
+ *   4) Cap dimensione PDF (PDF_MAX_BYTES, default 3 MB)
+ *   5) Honeypot field "hp" (i bot lo riempiono → silent reject)
  *
- * Vedi config.php.example per le opzioni di configurazione.
+ * Modalità di invio (in ordine di preferenza):
+ *   1. PHPMailer + SMTP (consigliato — Aruba/Gmail/qualsiasi SMTP autenticato)
+ *   2. mail() di PHP (fallback)
  */
 
 declare(strict_types=1);
 
 // ---- CORS / output ----
 header('Content-Type: application/json; charset=UTF-8');
-header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
+header('X-Content-Type-Options: nosniff');
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST')   { http_response_code(405); echo json_encode(['success'=>false,'error'=>'Solo POST']); exit; }
 
@@ -35,21 +38,132 @@ if (!file_exists($configFile)) {
 }
 $cfg = require $configFile;
 
-// ---- Logging interno (lato server, mai esposto al lead) ----
+// ---- Logging interno (solo lato server) ----
 $logFile = __DIR__ . '/invia-report.log';
 function logErr(string $msg): void {
     global $logFile;
     @file_put_contents($logFile, '['.date('c').'] '.$msg."\n", FILE_APPEND);
 }
 
-// ---- Parse input ----
-$raw = file_get_contents('php://input');
-$input = json_decode($raw, true);
-if (!is_array($input)) {
-    echo json_encode(['success'=>false,'error'=>'Payload JSON non valido']);
+function clientIp(): string {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP'] as $h) {
+        if (!empty($_SERVER[$h])) {
+            $ip = trim(explode(',', (string)$_SERVER[$h])[0]);
+            break;
+        }
+    }
+    return $ip;
+}
+
+function rejectAbuse(string $reason): void {
+    logErr('REJECT '.clientIp().' :: '.$reason);
+    http_response_code(400);
+    // Messaggio generico: non rivelare quale check è scattato
+    echo json_encode(['success' => false, 'error' => 'Richiesta non valida. Riprova dal calcolatore.']);
     exit;
 }
 
+// =====================================================
+// LAYER 1 — Origin / Referer check
+// =====================================================
+$allowedOrigins = $cfg['ALLOWED_ORIGINS'] ?? []; // es. ['https://www.tuodominio.it']
+if (is_array($allowedOrigins) && count($allowedOrigins) > 0) {
+    $origin  = $_SERVER['HTTP_ORIGIN']  ?? '';
+    $referer = $_SERVER['HTTP_REFERER'] ?? '';
+    $matched = false;
+    foreach ($allowedOrigins as $allowed) {
+        $allowed = rtrim((string)$allowed, '/');
+        if ($origin && stripos($origin, $allowed) === 0)  { $matched = true; break; }
+        if ($referer && stripos($referer, $allowed) === 0) { $matched = true; break; }
+    }
+    if (!$matched) {
+        rejectAbuse("origin mismatch (origin=$origin, referer=$referer)");
+    }
+    // CORS solo verso le origin autorizzate
+    if ($origin) header("Access-Control-Allow-Origin: $origin");
+} else {
+    // Nessuna allow-list: comportamento permissivo (sviluppo). Sconsigliato in prod.
+    header('Access-Control-Allow-Origin: *');
+}
+
+// =====================================================
+// LAYER 2 — Rate limit per IP (file-based, sliding window 1h)
+// =====================================================
+$rateMax    = (int)($cfg['RATE_LIMIT_MAX_PER_HOUR'] ?? 5);
+$rateFile   = __DIR__ . '/rate-limit.json';
+$rateWindow = 3600; // secondi
+if ($rateMax > 0) {
+    $now = time();
+    $ip  = clientIp();
+
+    // Apri/lock/leggi/aggiorna in modo atomico
+    $fp = @fopen($rateFile, 'c+');
+    if ($fp) {
+        @flock($fp, LOCK_EX);
+        $contents = stream_get_contents($fp) ?: '{}';
+        $store    = json_decode($contents, true);
+        if (!is_array($store)) $store = [];
+
+        // Cleanup periodico: rimuovi IP con tutte le timestamp scadute (ogni ~50 richieste)
+        if (mt_rand(0, 50) === 0) {
+            foreach ($store as $k => $ts) {
+                if (!is_array($ts)) { unset($store[$k]); continue; }
+                $store[$k] = array_values(array_filter($ts, fn($t) => $now - (int)$t < $rateWindow));
+                if (empty($store[$k])) unset($store[$k]);
+            }
+        }
+
+        $hits = $store[$ip] ?? [];
+        if (!is_array($hits)) $hits = [];
+        $hits = array_values(array_filter($hits, fn($t) => $now - (int)$t < $rateWindow));
+
+        if (count($hits) >= $rateMax) {
+            @flock($fp, LOCK_UN);
+            @fclose($fp);
+            logErr("RATE-LIMIT $ip ($rateMax/h superato)");
+            http_response_code(429);
+            echo json_encode(['success' => false, 'error' => 'Troppi tentativi. Riprova fra qualche minuto.']);
+            exit;
+        }
+
+        $hits[] = $now;
+        $store[$ip] = $hits;
+
+        @ftruncate($fp, 0);
+        @rewind($fp);
+        @fwrite($fp, json_encode($store));
+        @fflush($fp);
+        @flock($fp, LOCK_UN);
+        @fclose($fp);
+    }
+}
+
+// =====================================================
+// LAYER 5 — Honeypot (presente subito perché basta a stoppare i bot)
+// =====================================================
+$raw   = file_get_contents('php://input');
+$input = json_decode($raw, true);
+if (!is_array($input)) {
+    rejectAbuse('payload JSON invalido');
+}
+if (isset($input['hp']) && trim((string)$input['hp']) !== '') {
+    // I bot riempiono campi nascosti. Risposta "success" finta per non
+    // fare imparare al bot che ha sbagliato.
+    logErr('HONEYPOT '.clientIp());
+    echo json_encode(['success' => true, 'method' => 'noop']);
+    exit;
+}
+
+// =====================================================
+// LAYER 3 — Consenso privacy obbligatorio
+// =====================================================
+$consent = $input['privacy_consent'] ?? false;
+if ($consent !== true && $consent !== 'true' && $consent !== 1) {
+    rejectAbuse('privacy_consent mancante o non true');
+}
+
+// ---- Parse input ----
 $nome      = trim((string)($input['nome']      ?? ''));
 $cognome   = trim((string)($input['cognome']   ?? ''));
 $telefono  = trim((string)($input['telefono']  ?? ''));
@@ -58,22 +172,40 @@ $vantaggio = trim((string)($input['vantaggio'] ?? ''));
 $pdfB64    = (string)($input['pdf']            ?? '');
 
 if ($nome === '' || $cognome === '' || $email === '' || $pdfB64 === '') {
-    echo json_encode(['success'=>false,'error'=>'Dati lead incompleti']);
-    exit;
+    rejectAbuse('campi lead incompleti');
 }
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    echo json_encode(['success'=>false,'error'=>'Email destinatario non valida']);
-    exit;
+    rejectAbuse('email destinatario non valida');
+}
+// Limita la lunghezza dei campi (anti-overflow / anti-junk)
+if (strlen($nome) > 120 || strlen($cognome) > 120 || strlen($telefono) > 40 || strlen($email) > 254) {
+    rejectAbuse('campi lead troppo lunghi');
 }
 
+// =====================================================
+// LAYER 4 — Cap dimensione PDF
+// =====================================================
+$pdfMaxBytes = (int)($cfg['PDF_MAX_BYTES'] ?? (3 * 1024 * 1024)); // 3 MB default
+// Stima rapida: 1 byte base64 ≈ 0.75 byte binari
+if (strlen($pdfB64) > (int)($pdfMaxBytes * 1.4)) {
+    rejectAbuse('PDF base64 oltre il limite');
+}
 $pdfBytes = base64_decode($pdfB64, true);
 if ($pdfBytes === false || strncmp($pdfBytes, '%PDF', 4) !== 0) {
-    echo json_encode(['success'=>false,'error'=>'PDF allegato non valido']);
-    exit;
+    rejectAbuse('PDF allegato non valido (header)');
 }
+if (strlen($pdfBytes) > $pdfMaxBytes) {
+    rejectAbuse('PDF binario oltre il limite ('.strlen($pdfBytes).' > '.$pdfMaxBytes.')');
+}
+
 $pdfFilename = 'Report_Previdenziale_' . preg_replace('/[^A-Za-z0-9]+/', '_', $nome.'_'.$cognome) . '.pdf';
 
-// ---- Compose corpo email (HTML brandizzato) ----
+// ---- Compose corpo email (HTML brandizzato dal config) ----
+$advisorName  = (string)($cfg['ADVISOR_NAME']  ?? 'Domenico Mosca');
+$advisorTitle = (string)($cfg['ADVISOR_TITLE'] ?? 'Consulente Finanziario FinecoBank');
+$advisorPhone = (string)($cfg['ADVISOR_PHONE'] ?? '');
+$advisorEmail = (string)($cfg['ADVISOR_EMAIL'] ?? '');
+
 $bodyHtml = '
 <!DOCTYPE html><html lang="it"><body style="font-family:Arial,Helvetica,sans-serif;background:#f0f4f8;margin:0;padding:30px">
 <div style="max-width:600px;margin:auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08)">
@@ -100,12 +232,12 @@ $bodyHtml = '
       <span style="color:#78350f">Sono disponibile per una consulenza gratuita personalizzata. Rispondi a questa email o contattami direttamente.</span>
     </div>
     <div style="border-top:1px solid #e2e8f0;padding-top:18px;margin-top:28px;text-align:center">
-      <p style="font-weight:bold;color:#003B5C;margin:0 0 4px;font-size:16px">'.htmlspecialchars($cfg['ADVISOR_NAME'] ?? 'Domenico Mosca', ENT_QUOTES, 'UTF-8').'</p>
-      <p style="color:#64748b;margin:0;font-size:13px">'.htmlspecialchars($cfg['ADVISOR_TITLE'] ?? 'Consulente Finanziario FinecoBank', ENT_QUOTES, 'UTF-8').'</p>
-      '.(!empty($cfg['ADVISOR_PHONE']) || !empty($cfg['ADVISOR_EMAIL']) ? '<p style="color:#64748b;margin:6px 0 0;font-size:12px">'.
-          (!empty($cfg['ADVISOR_PHONE']) ? 'Tel. '.htmlspecialchars($cfg['ADVISOR_PHONE'], ENT_QUOTES, 'UTF-8') : '').
-          (!empty($cfg['ADVISOR_PHONE']) && !empty($cfg['ADVISOR_EMAIL']) ? ' &middot; ' : '').
-          (!empty($cfg['ADVISOR_EMAIL']) ? htmlspecialchars($cfg['ADVISOR_EMAIL'], ENT_QUOTES, 'UTF-8') : '').
+      <p style="font-weight:bold;color:#003B5C;margin:0 0 4px;font-size:16px">'.htmlspecialchars($advisorName, ENT_QUOTES, 'UTF-8').'</p>
+      <p style="color:#64748b;margin:0;font-size:13px">'.htmlspecialchars($advisorTitle, ENT_QUOTES, 'UTF-8').'</p>
+      '.($advisorPhone !== '' || $advisorEmail !== '' ? '<p style="color:#64748b;margin:6px 0 0;font-size:12px">'.
+          ($advisorPhone !== '' ? 'Tel. '.htmlspecialchars($advisorPhone, ENT_QUOTES, 'UTF-8') : '').
+          ($advisorPhone !== '' && $advisorEmail !== '' ? ' &middot; ' : '').
+          ($advisorEmail !== '' ? htmlspecialchars($advisorEmail, ENT_QUOTES, 'UTF-8') : '').
         '</p>' : '').'
     </div>
   </div>
@@ -119,9 +251,9 @@ $bodyTxt =
     "in allegato il tuo report previdenziale personalizzato.\n".
     "Vantaggio netto stimato: ".($vantaggio !== '' ? $vantaggio : 'vedi report').".\n\n".
     "Per qualsiasi domanda puoi rispondere a questa email.\n\n".
-    "— ".($cfg['ADVISOR_NAME'] ?? 'Domenico Mosca')." (".($cfg['ADVISOR_TITLE'] ?? 'Consulente Finanziario FinecoBank').")\n";
+    "— $advisorName ($advisorTitle)\n";
 
-$subject = 'Il tuo Report Previdenziale — '.($cfg['ADVISOR_NAME'] ?? 'Domenico Mosca FinecoBank');
+$subject  = 'Il tuo Report Previdenziale — '.$advisorName;
 $fromAddr = $cfg['MITTENTE_EMAIL'] ?? 'noreply@example.it';
 $fromName = $cfg['MITTENTE_NOME']  ?? 'Vantaggio Pensione';
 $bcc      = $cfg['BCC_CONSULENTE'] ?? null;
@@ -133,16 +265,14 @@ $useSmtp = !empty($cfg['SMTP_HOST']) && !empty($cfg['SMTP_USER']) && !empty($cfg
 $phpmailerLoaded = false;
 
 if ($useSmtp) {
-    // Cerca PHPMailer in posizioni comuni
     $candidates = [
-        __DIR__ . '/vendor/autoload.php',                      // composer install
-        __DIR__ . '/PHPMailer/src/PHPMailer.php',              // download manuale
+        __DIR__ . '/vendor/autoload.php',
+        __DIR__ . '/PHPMailer/src/PHPMailer.php',
         __DIR__ . '/phpmailer/src/PHPMailer.php',
     ];
     foreach ($candidates as $f) {
         if (file_exists($f)) {
             require_once $f;
-            // Se è il file PHPMailer.php (non l'autoload), include anche le altre classi
             if (basename($f) === 'PHPMailer.php') {
                 @require_once dirname($f) . '/SMTP.php';
                 @require_once dirname($f) . '/Exception.php';
@@ -161,16 +291,14 @@ if ($useSmtp && $phpmailerLoaded) {
         $mail->Port       = (int)($cfg['SMTP_PORT'] ?? 587);
         $mail->SMTPAuth   = true;
         $mail->Username   = $cfg['SMTP_USER'];
-        // Gmail App Password può avere spazi: rimuovili solo se la stringa
-        // ha la forma esatta Gmail (4 gruppi da 4 caratteri lowercase)
         $pass = (string)$cfg['SMTP_PASS'];
         if (preg_match('/^[a-z]{4} [a-z]{4} [a-z]{4} [a-z]{4}$/', $pass)) {
             $pass = str_replace(' ', '', $pass);
         }
         $mail->Password   = $pass;
         $mail->SMTPSecure = !empty($cfg['SMTP_SSL'])
-            ? \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS   // SSL diretto (porta 465)
-            : \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS; // STARTTLS (porta 587)
+            ? \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS
+            : \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
         $mail->CharSet    = 'UTF-8';
         $mail->Encoding   = 'base64';
         if (!empty($cfg['SMTP_DEBUG'])) {
@@ -203,7 +331,7 @@ if ($useSmtp && $phpmailerLoaded) {
 }
 
 // ============================================================
-// Tentativo 2 — mail() built-in (fallback senza PHPMailer)
+// Tentativo 2 — mail() built-in (fallback)
 // ============================================================
 $boundary = md5(uniqid((string)time(), true));
 $headers  = "From: $fromName <$fromAddr>\r\n";
