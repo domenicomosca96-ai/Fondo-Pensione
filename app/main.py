@@ -2,10 +2,24 @@ import base64
 import binascii
 import logging
 import os
+import re
 import smtplib
 import ssl
 from email.message import EmailMessage
 from typing import Optional
+
+
+# Gmail mostra le App Password come quattro gruppi da 4 caratteri lowercase
+# separati da spazi singoli ("mdrs uvqn twty lhnn"). Lato SMTP vanno passate
+# senza spazi. Per qualsiasi altro provider la password resta intatta —
+# SMTP è opaco e password legittime possono contenere whitespace.
+_GMAIL_APP_PASSWORD_RE = re.compile(r"^[a-z]{4} [a-z]{4} [a-z]{4} [a-z]{4}$")
+
+
+def _normalize_smtp_password(raw: str) -> str:
+    if _GMAIL_APP_PASSWORD_RE.match(raw):
+        return raw.replace(" ", "")
+    return raw
 
 import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
@@ -112,10 +126,7 @@ def _smtp_config() -> Optional[dict]:
         "host": host.strip(),
         "port": port,
         "user": user.strip(),
-        # Gmail App Passwords vengono mostrate da Google con spazi ogni 4
-        # caratteri per leggibilità ("mdrs uvqn twty lhnn"). Lato SMTP
-        # vanno trasmesse senza spazi: rimuoviamo qualsiasi whitespace.
-        "password": "".join(password.split()),
+        "password": _normalize_smtp_password(password),
         "use_ssl": (_env("SMTP_SSL", default="false") or "false").lower() in {"1", "true", "yes"},
         "from_addr": (_env("SMTP_FROM") or user).strip(),
         "from_name": _env("SMTP_FROM_NAME", default="Vantaggio Pensione"),
