@@ -112,7 +112,10 @@ def _smtp_config() -> Optional[dict]:
         "host": host.strip(),
         "port": port,
         "user": user.strip(),
-        "password": password,
+        # Gmail App Passwords vengono mostrate da Google con spazi ogni 4
+        # caratteri per leggibilità ("mdrs uvqn twty lhnn"). Lato SMTP
+        # vanno trasmesse senza spazi: rimuoviamo qualsiasi whitespace.
+        "password": "".join(password.split()),
         "use_ssl": (_env("SMTP_SSL", default="false") or "false").lower() in {"1", "true", "yes"},
         "from_addr": (_env("SMTP_FROM") or user).strip(),
         "from_name": _env("SMTP_FROM_NAME", default="Vantaggio Pensione"),
