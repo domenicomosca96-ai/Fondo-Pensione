@@ -1,0 +1,44 @@
+<?php
+/**
+ * config.php — Configurazione del bundle portabile.
+ *
+ * 1. Copia questo file e rinominalo in `config.php`
+ * 2. Compila i campi sotto con le TUE credenziali
+ * 3. Lascialo nella stessa cartella di invia-report.php / gemini-proxy.php
+ *
+ * IMPORTANTE: il file config.php contiene segreti.
+ * Il `.htaccess` accanto blocca l'accesso diretto via web (Apache).
+ * Su nginx aggiungi una regola equivalente nella tua server config.
+ */
+
+return [
+
+    // ====== GEMINI (analisi AI opzionale) ======
+    'GEMINI_API_KEY' => '',                       // Chiave da https://aistudio.google.com/app/apikey
+    'GEMINI_MODEL'   => 'gemini-2.5-flash',       // Modello da usare
+
+    // ====== SMTP ======
+    // Compila per usare PHPMailer + SMTP autenticato (consigliato).
+    // Lascia vuoto SMTP_HOST per usare il fallback mail() di PHP
+    // (funziona su Aruba/sendmail ma con deliverability inferiore).
+
+    'SMTP_HOST' => '',                            // es. 'smtps.aruba.it'  o  'smtp.gmail.com'
+    'SMTP_PORT' => 587,                           // 587 STARTTLS  |  465 SSL
+    'SMTP_USER' => '',                            // username (di solito = email mittente)
+    'SMTP_PASS' => '',                            // password (Gmail: App Password, anche con spazi)
+    'SMTP_SSL'  => false,                         // true = SSL diretto (porta 465); false = STARTTLS (587)
+    'SMTP_DEBUG'=> false,                         // true = log dettagliato in invia-report.log
+
+    // ====== Mittente ======
+    'MITTENTE_EMAIL' => 'noreply@tuodominio.it',  // deve essere un indirizzo del TUO dominio
+    'MITTENTE_NOME'  => 'Vantaggio Pensione',
+
+    // ====== Copia consulente ======
+    'BCC_CONSULENTE' => 'domenico.mosca@pfafineco.it', // ricevi una copia di ogni lead. Lascia '' per disabilitare.
+
+    // ====== Brand consulente (mostrato nell'email) ======
+    'ADVISOR_NAME'   => 'Domenico Mosca',
+    'ADVISOR_TITLE'  => 'Consulente Finanziario FinecoBank',
+    'ADVISOR_PHONE'  => '331 7849240',
+    'ADVISOR_EMAIL'  => 'domenico.mosca@pfafineco.it',
+];

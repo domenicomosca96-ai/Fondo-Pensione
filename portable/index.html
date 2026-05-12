@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vantaggio Pensione | Dipendenti & Professionisti</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f0f4f8; }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 8px; cursor: pointer; background: #d1d5db; border-radius: 5px; }
+        input[type=range]::-webkit-slider-thumb { height: 20px; width: 20px; border-radius: 50%; background: #005A78; cursor: pointer; -webkit-appearance: none; margin-top: -6px; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: transform .1s; }
+        input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.1); }
+        input[type=range]::-moz-range-track { width: 100%; height: 8px; cursor: pointer; background: #d1d5db; border-radius: 5px; }
+        input[type=range]::-moz-range-thumb { height: 20px; width: 20px; border-radius: 50%; background: #005A78; cursor: pointer; border: none; }
+        .toggle-checkbox:checked { right: 0; border-color: #005A78; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #005A78; }
+        .spinner { border: 4px solid rgba(0,0,0,.1); width: 36px; height: 36px; border-radius: 50%; border-left-color: #005A78; animation: spin 1s ease infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .type-radio:checked + label { background-color: #005A78; color: white; border-color: #005A78; }
+        .fade-in { animation: fadeIn .4s ease; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+        .blur-content { filter: blur(2.5px); opacity: .85; user-select: none; pointer-events: none; }
+        .gate-overlay { background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 70%, rgba(255,255,255,.6) 88%, rgba(255,255,255,.92) 100%); }
+    </style>
+</head>
+<body class="antialiased text-gray-800 flex flex-col min-h-screen">
+
+<!-- Bundle PORTABILE: l'invio email passa da invia-report.php (PHP), l'AI da gemini-proxy.php. Configura tutto in config.php. -->
+
+<div class="container mx-auto p-4 md:p-8 max-w-7xl flex-grow">
+
+    <header class="text-center mb-8">
+        <h1 class="text-3xl md:text-5xl font-extrabold text-[#003B5C]">Calcolatore Previdenza</h1>
+        <p class="mt-4 text-lg text-gray-600 max-w-2xl mx-auto">Dipendenti e Liberi Professionisti: Scopri quanto risparmi in tasse e i rendimenti generati usando un fondo pensione.</p>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+
+        <!-- ===== COLONNA SINISTRA: FORM CALCOLATORE (invariata) ===== -->
+        <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg h-fit border-t-4 border-[#005A78]">
+            <div class="mb-6">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Seleziona il tuo profilo lavorativo</label>
+                <div class="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-lg mb-4">
+                    <div>
+                        <input type="radio" name="tipo-lavoro" id="lavoro-dipendente" value="dipendente" class="type-radio hidden" checked>
+                        <label for="lavoro-dipendente" class="block text-center py-2 px-4 rounded-md cursor-pointer transition-all duration-200 text-gray-600 font-medium hover:bg-gray-200">🏢 Dipendente</label>
+                    </div>
+                    <div>
+                        <input type="radio" name="tipo-lavoro" id="lavoro-autonomo" value="autonomo" class="type-radio hidden">
+                        <label for="lavoro-autonomo" class="block text-center py-2 px-4 rounded-md cursor-pointer transition-all duration-200 text-gray-600 font-medium hover:bg-gray-200">💼 Professionista</label>
+                    </div>
+                </div>
+                <div id="box-regime-fiscale" class="hidden bg-orange-50 p-3 rounded-lg border border-orange-100">
+                    <div class="flex items-center justify-between">
+                        <span class="font-medium text-gray-700 text-sm">Regime Fiscale</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-500" id="label-regime">Ordinario</span>
+                            <div class="relative inline-block w-10 align-middle select-none">
+                                <input type="checkbox" name="regime-toggle" id="regime-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                                <label for="regime-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-orange-600 mt-1" id="info-regime">Deduzione IRPEF attiva.</p>
+                </div>
+            </div>
+
+            <form id="pension-form" class="space-y-6">
+                <div class="space-y-4">
+                    <div>
+                        <label for="eta-attuale" class="flex justify-between font-medium text-gray-700">
+                            <span>Età attuale</span><span id="eta-value" class="font-bold text-[#005A78]">35</span>
+                        </label>
+                        <input type="range" id="eta-attuale" min="18" max="66" value="35">
+                    </div>
+                    <div>
+                        <label for="eta-pensione" class="flex justify-between font-medium text-gray-700">
+                            <span>Età di pensionamento</span><span id="pensione-value" class="font-bold text-[#005A78]">67</span>
+                        </label>
+                        <input type="range" id="eta-pensione" min="18" max="72" value="67">
+                    </div>
+                    <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <p class="text-sm text-gray-600">Orizzonte temporale</p>
+                        <p id="anni-mancanti" class="font-bold text-lg text-[#003B5C]">32 anni</p>
+                    </div>
+                </div>
+                <hr class="border-gray-200">
+                <div class="space-y-4">
+                    <div>
+                        <label for="ral" class="font-medium text-gray-700" id="label-ral">Reddito Annuo Lordo (RAL)</label>
+                        <div class="mt-1 relative rounded-md shadow-sm">
+                            <div class="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center"><span class="text-gray-500 sm:text-sm">€</span></div>
+                            <input type="number" id="ral" value="45000" class="w-full pl-7 pr-12 py-2 border border-gray-300 rounded-md focus:ring-[#005A78] focus:border-[#005A78]">
+                        </div>
+                    </div>
+                    <div id="section-dipendente" class="space-y-4">
+                        <div>
+                            <label for="ccnl" class="font-medium text-gray-700">CCNL di riferimento</label>
+                            <select id="ccnl" class="mt-1 w-full py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#005A78] focus:border-[#005A78] bg-white">
+                                <option value="Commercio">Commercio</option>
+                                <option value="Metalmeccanico">Metalmeccanico</option>
+                                <option value="Turismo">Turismo</option>
+                                <option value="Chimico">Chimico</option>
+                                <option value="Altro">Altro / Nessuno</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100">
+                            <span class="font-medium text-gray-700 text-sm">Trasferisci TFR al fondo?</span>
+                            <div class="relative inline-block w-10 mr-2 align-middle select-none">
+                                <input type="checkbox" name="tfr-toggle" id="tfr-toggle" checked class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                                <label for="tfr-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="montante-iniziale" class="font-medium text-gray-700 text-sm">Capitale già versato</label>
+                            <div class="mt-1 relative rounded-md shadow-sm">
+                                <div class="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center"><span class="text-gray-500 sm:text-sm">€</span></div>
+                                <input type="number" id="montante-iniziale" value="0" class="w-full pl-7 pr-4 py-2 border border-gray-300 rounded-md focus:ring-[#005A78] focus:border-[#005A78]">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="crescita-salariale" class="font-medium text-gray-700 text-sm">Crescita reddito annua</label>
+                            <div class="mt-1 relative rounded-md shadow-sm">
+                                <div class="pointer-events-none absolute inset-y-0 right-0 pr-3 flex items-center"><span class="text-gray-500 sm:text-sm">%</span></div>
+                                <input type="number" step="0.1" id="crescita-salariale" value="2.0" class="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-md focus:ring-[#005A78] focus:border-[#005A78]">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 text-center bg-gray-100 p-3 rounded-lg">
+                        <div id="box-tfr-annuo">
+                            <p class="text-xs text-gray-500 uppercase tracking-wide">TFR annuo</p>
+                            <p id="tfr-annuale" class="font-bold text-md text-[#003B5C]">€ 3.110</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 uppercase tracking-wide">Aliquota Marginale</p>
+                            <p id="aliquota-irpef" class="font-bold text-md text-[#003B5C]">35,0%</p>
+                        </div>
+                    </div>
+                </div>
+                <hr class="border-gray-200">
+                <div class="space-y-4">
+                    <div>
+                        <label for="contributo-volontario" class="font-medium text-gray-700">Il tuo Versamento Annuo</label>
+                        <p class="text-xs text-gray-500 mb-2">Massimizza la deduzione versando fino a 5.164€</p>
+                        <div class="mt-1 relative rounded-md shadow-sm">
+                            <div class="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center"><span class="text-gray-500 sm:text-sm">€</span></div>
+                            <input type="number" id="contributo-volontario" value="5165" class="w-full pl-7 pr-12 py-2 border border-gray-300 rounded-md focus:ring-[#005A78] focus:border-[#005A78] font-bold text-gray-700">
+                        </div>
+                    </div>
+                    <div id="section-datore" class="transition-opacity duration-300">
+                        <label for="contributo-datore" class="font-medium text-gray-700 flex items-center gap-2">
+                            Contributo Datore (%)<span class="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-0.5 rounded">Gratis</span>
+                        </label>
+                        <div class="mt-1 flex items-center gap-2">
+                            <input type="number" step="0.01" id="contributo-datore" value="1.55" class="w-24 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-[#005A78] focus:border-[#005A78]">
+                            <span id="contributo-datore-euro" class="font-bold text-gray-600 whitespace-nowrap text-sm">= € 698</span>
+                        </div>
+                        <div class="mt-2 flex items-center">
+                            <input type="checkbox" id="no-contributo-datore" class="h-4 w-4 text-[#005A78] focus:ring-[#005A78] border-gray-300 rounded">
+                            <label for="no-contributo-datore" class="ml-2 block text-sm text-gray-600">Escludi contributo datore</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="pt-2">
+                    <button id="calcola-btn" class="w-full bg-[#005A78] hover:bg-[#004860] text-white font-bold py-3 px-4 rounded-xl shadow-lg transform active:scale-95 transition-all duration-200 flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                        <span id="btn-text">Calcola Vantaggio</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- ===== COLONNA DESTRA: RISULTATI ===== -->
+        <div class="lg:col-span-3 space-y-6" id="results-panel">
+
+            <!-- STATO 0: Pre-calcolo -->
+            <div id="stato-idle" class="flex flex-col items-center justify-center h-64 bg-white rounded-2xl shadow-sm border border-dashed border-gray-200">
+                <div class="text-center px-8">
+                    <div class="w-16 h-16 bg-[#005A78]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-[#005A78]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    </div>
+                    <p class="text-gray-500 font-medium">Inserisci i tuoi dati e premi<br><strong class="text-[#005A78]">Calcola Vantaggio</strong> per vedere i risultati</p>
+                </div>
+            </div>
+
+            <!-- STATO 1: Calcolato — mostra solo numero + gate -->
+            <div id="stato-calcolato" class="hidden space-y-6 fade-in">
+
+                <!-- BIG NUMBER: sempre visibile -->
+                <div class="bg-white p-6 rounded-2xl shadow-lg border-l-8 border-green-500 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-green-100 rounded-full opacity-50 blur-xl"></div>
+                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Vantaggio Netto Stimato</h3>
+                    <p class="text-xs text-gray-400 mb-2">rispetto all'alternativa standard</p>
+                    <div class="flex items-baseline gap-4 mt-1 z-10 relative">
+                        <span id="vantaggio-totale" class="text-5xl font-extrabold text-green-600">+€ 0</span>
+                        <span id="vantaggio-percentuale" class="text-xl font-bold text-green-700 bg-green-100 px-3 py-1 rounded-full">+0%</span>
+                    </div>
+                </div>
+
+                <!-- GATE CARD: form per sbloccare l'analisi -->
+                <div id="gate-section" class="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
+                    <!-- Anteprima sfocata dei contenuti bloccati -->
+                    <div class="relative">
+                        <div class="blur-content p-5 space-y-3 pointer-events-none select-none" aria-hidden="true">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                    <p class="text-[10px] font-bold text-gray-500 uppercase">Scenario Standard</p>
+                                    <p class="text-xs text-gray-400 mb-2">(TFR + Investimento)</p>
+                                    <p class="text-2xl font-bold text-gray-700">€ 142.830</p>
+                                </div>
+                                <div class="bg-white p-4 rounded-xl border-2 border-[#009FBD] shadow-sm">
+                                    <p class="text-[10px] font-bold text-[#009FBD] uppercase">Con Fondo Pensione</p>
+                                    <p class="text-xs text-cyan-600 mb-2">(Capitale + Vantaggio Fiscale)</p>
+                                    <p class="text-2xl font-bold text-[#003B5C]">€ 201.450</p>
+                                </div>
+                            </div>
+                            <div class="bg-gradient-to-br from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-100">
+                                <p class="text-sm font-bold text-indigo-900 mb-2">✨ Analisi AI del Profilo</p>
+                                <div class="space-y-1.5">
+                                    <div class="h-2 bg-indigo-200 rounded w-full"></div>
+                                    <div class="h-2 bg-indigo-200 rounded w-11/12"></div>
+                                    <div class="h-2 bg-indigo-200 rounded w-4/5"></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-4 rounded-xl border border-gray-100">
+                                <p class="text-sm font-bold text-[#003B5C] mb-3">Composizione del Vantaggio</p>
+                                <div class="grid grid-cols-2 gap-x-6 gap-y-2">
+                                    <div class="flex justify-between text-xs"><span class="text-gray-600">● Rendimenti</span><span class="font-bold">€ 24.180</span></div>
+                                    <div class="flex justify-between text-xs"><span class="text-gray-600">● Deduzione Fiscale</span><span class="font-bold">€ 18.074</span></div>
+                                    <div class="flex justify-between text-xs"><span class="text-gray-600">● Tasse Finali</span><span class="font-bold">€ 9.120</span></div>
+                                    <div class="flex justify-between text-xs"><span class="text-gray-600">● Contr. Datore</span><span class="font-bold">€ 7.246</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="absolute inset-0 gate-overlay flex flex-col items-center justify-end pb-8 px-8">
+                        </div>
+                    </div>
+
+                    <!-- FORM LEAD -->
+                    <div class="px-6 pb-8 pt-2 border-t border-gray-100" id="lead-form-section">
+                        <div class="text-center mb-6">
+                            <div class="inline-flex items-center gap-2 bg-[#003B5C] text-white text-xs font-bold px-4 py-1.5 rounded-full mb-3">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                Analisi completa bloccata
+                            </div>
+                            <h3 class="text-xl font-bold text-[#003B5C]">Ricevi il tuo Report Previdenziale</h3>
+                            <p class="text-sm text-gray-500 mt-1">Inserisci i tuoi dati per sbloccare l'analisi dettagliata e ricevere il PDF via email.</p>
+                        </div>
+
+                        <form id="lead-form" class="space-y-4" novalidate>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="lead-nome" class="block text-sm font-medium text-gray-700 mb-1">Nome <span class="text-red-500">*</span></label>
+                                    <input type="text" id="lead-nome" placeholder="Mario" required
+                                        class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#005A78] focus:border-[#005A78] outline-none transition-all">
+                                    <p class="text-red-500 text-xs mt-1 hidden" id="err-nome">Campo obbligatorio</p>
+                                </div>
+                                <div>
+                                    <label for="lead-cognome" class="block text-sm font-medium text-gray-700 mb-1">Cognome <span class="text-red-500">*</span></label>
+                                    <input type="text" id="lead-cognome" placeholder="Rossi" required
+                                        class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#005A78] focus:border-[#005A78] outline-none transition-all">
+                                    <p class="text-red-500 text-xs mt-1 hidden" id="err-cognome">Campo obbligatorio</p>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="lead-telefono" class="block text-sm font-medium text-gray-700 mb-1">Numero di Cellulare <span class="text-red-500">*</span></label>
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">+39</span>
+                                    <input type="tel" id="lead-telefono" placeholder="333 1234567" required
+                                        class="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#005A78] focus:border-[#005A78] outline-none transition-all">
+                                </div>
+                                <p class="text-red-500 text-xs mt-1 hidden" id="err-telefono">Numero non valido</p>
+                            </div>
+                            <div>
+                                <label for="lead-email" class="block text-sm font-medium text-gray-700 mb-1">Email <span class="text-red-500">*</span></label>
+                                <input type="email" id="lead-email" placeholder="mario.rossi@email.it" required
+                                    class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#005A78] focus:border-[#005A78] outline-none transition-all">
+                                <p class="text-red-500 text-xs mt-1 hidden" id="err-email">Email non valida</p>
+                            </div>
+                            <div class="flex items-start gap-3 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                <input type="checkbox" id="lead-privacy" required
+                                    class="mt-0.5 h-4 w-4 text-[#005A78] focus:ring-[#005A78] border-gray-300 rounded cursor-pointer flex-shrink-0">
+                                <label for="lead-privacy" class="text-xs text-gray-600 cursor-pointer leading-relaxed">
+                                    Ho letto e accetto la <a href="#" class="text-[#005A78] underline font-medium">Privacy Policy</a>. Acconsento al trattamento dei miei dati personali da parte di <strong>Domenico Mosca</strong> (Consulente FinecoBank) per ricevere il report previdenziale personalizzato e per essere ricontattato.
+                                </label>
+                            </div>
+                            <p class="text-red-500 text-xs hidden" id="err-privacy">Devi accettare la privacy policy per continuare</p>
+
+                            <button type="submit" id="lead-submit-btn"
+                                class="w-full bg-[#005A78] hover:bg-[#004860] text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transform active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 text-base">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                <span id="lead-btn-text">Sblocca Analisi e Ricevi il PDF</span>
+                            </button>
+                            <p class="text-center text-xs text-gray-400">Nessuno spam. I tuoi dati sono al sicuro.</p>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STATO 2: Analisi completa sbloccata -->
+            <div id="stato-sbloccato" class="hidden space-y-6 fade-in">
+
+                <!-- BIG NUMBER (duplicato per continuità) -->
+                <div class="bg-white p-6 rounded-2xl shadow-lg border-l-8 border-green-500 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-green-100 rounded-full opacity-50 blur-xl"></div>
+                    <div class="flex items-center justify-between mb-1">
+                        <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Vantaggio Netto Stimato</h3>
+                        <span class="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                            Analisi sbloccata
+                        </span>
+                    </div>
+                    <div class="flex items-baseline gap-4 mt-2 z-10 relative">
+                        <span id="vantaggio-totale-2" class="text-5xl font-extrabold text-green-600">+€ 0</span>
+                        <span id="vantaggio-percentuale-2" class="text-xl font-bold text-green-700 bg-green-100 px-3 py-1 rounded-full">+0%</span>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-1">Rispetto all'alternativa standard (TFR in azienda o investimento fai-da-te).</p>
+                    <div class="mt-3 pt-3 border-t border-gray-100 flex gap-4">
+                        <button id="explain-btn" class="text-sm text-[#005A78] font-medium hover:underline flex items-center gap-1">💡 Spiegami questo numero</button>
+                        <button id="download-pdf-btn" class="text-sm text-gray-600 font-medium hover:underline flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            Scarica PDF
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CONFRONTO SCENARI -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-gray-50 p-5 rounded-xl border border-gray-200 relative hover:border-orange-300 transition-colors">
+                        <div class="absolute top-3 right-3 text-orange-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        <h4 class="text-sm font-bold text-gray-500 uppercase" id="label-scenario-a">Scenario Standard</h4>
+                        <p class="text-xs text-gray-400 mb-3" id="sublabel-scenario-a">(TFR + Investimento Netto)</p>
+                        <p class="text-3xl font-bold text-gray-700" id="tfr-netto">€ 0</p>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border-2 border-[#009FBD] shadow-md relative overflow-hidden">
+                        <h4 class="text-sm font-bold text-[#009FBD] uppercase">Con Fondo Pensione</h4>
+                        <p class="text-xs text-cyan-600 mb-3" id="label-scenario-b">(Capitale + Vantaggio Fiscale)</p>
+                        <p class="text-3xl font-bold text-[#003B5C]" id="fondo-netto">€ 0</p>
+                    </div>
+                </div>
+
+                <!-- ANALISI AI -->
+                <div class="bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-2xl border border-indigo-100 shadow-sm">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-indigo-900 flex items-center gap-2">✨ Analisi AI del Profilo</h3>
+                        <button id="gemini-analysis-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors">Genera Analisi</button>
+                    </div>
+                    <div id="gemini-analysis-container" class="hidden">
+                        <div id="gemini-spinner" class="spinner mx-auto my-4"></div>
+                        <div id="gemini-analysis-text" class="text-sm text-gray-700 leading-relaxed bg-white/60 p-4 rounded-lg border border-indigo-100"></div>
+                    </div>
+                    <p class="text-xs text-indigo-400 mt-2 text-center" id="gemini-placeholder">Premi il pulsante per ricevere un commento personalizzato sul tuo scenario.</p>
+                </div>
+
+                <!-- COMPOSIZIONE VANTAGGIO -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h3 class="text-lg font-bold text-[#003B5C] mb-4">Composizione del Vantaggio</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                        <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                            <span class="text-sm font-medium text-gray-600 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#009FBD]"></span> Rendimenti</span>
+                            <span id="maggior-capitale" class="font-bold text-gray-800">€ 0</span>
+                        </div>
+                        <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                            <span class="text-sm font-medium text-gray-600 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#f9b572]"></span> Deduzione Fiscale</span>
+                            <span id="risparmio-versamenti" class="font-bold text-gray-800">€ 0</span>
+                        </div>
+                        <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                            <span class="text-sm font-medium text-gray-600 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#7E8EF1]"></span> Tasse Finali</span>
+                            <span id="vantaggio-pensionamento" class="font-bold text-gray-800">€ 0</span>
+                        </div>
+                        <div class="flex items-center justify-between border-b border-gray-100 pb-2" id="row-datore">
+                            <span class="text-sm font-medium text-gray-600 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#C2D9FF]"></span> Contr. Datore</span>
+                            <span id="valore-contributo-datore" class="font-bold text-gray-800">€ 0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GRAFICI -->
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 h-72">
+                        <canvas id="comparison-chart"></canvas>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 h-72">
+                        <canvas id="advantage-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- RENDITA / CAPITALE -->
+                <div class="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                    <h3 class="text-lg font-bold text-gray-700 mb-4">A fine carriera: Rendita o Capitale?</h3>
+                    <div class="mb-6">
+                        <div class="flex justify-between text-sm mb-2">
+                            <span>Capitale Subito: <b id="perc-capitale-display">50%</b></span>
+                            <span>Rendita: <b id="perc-rendita-display">50%</b></span>
+                        </div>
+                        <input type="range" id="erogazione-capitale-perc" min="0" max="50" step="5" value="50" class="w-full h-2 rounded-lg cursor-pointer bg-gray-300">
+                        <p id="regola-capitale-info" class="text-xs text-gray-500 mt-2">Max 50% in capitale (salvo casi di montante esiguo).</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-white p-3 rounded-lg shadow-sm text-center">
+                            <span class="block text-xs text-gray-500 uppercase">Assegno Subito</span>
+                            <span id="capitale-subito-netto" class="block text-lg font-bold text-[#003B5C]">€ 0</span>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg shadow-sm text-center">
+                            <span class="block text-xs text-gray-500 uppercase">Rendita Mensile</span>
+                            <span id="rendita-mensile-lorda" class="block text-lg font-bold text-[#003B5C]">€ 0</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+
+</div>
+
+<!-- MODAL SPIEGAZIONE AI -->
+<div id="explanation-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 overflow-y-auto h-full w-full flex items-center justify-center z-50 backdrop-blur-sm">
+    <div class="relative mx-auto p-6 border w-11/12 max-w-lg shadow-2xl rounded-2xl bg-white">
+        <h3 class="text-xl font-bold text-gray-900 mb-4">Analisi Tecnica del Risultato</h3>
+        <div id="explanation-spinner" class="spinner mx-auto my-8 hidden"></div>
+        <p id="explanation-text" class="text-gray-600 text-lg leading-relaxed mb-6"></p>
+        <button id="close-modal-btn" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold py-3 rounded-xl transition-colors">Ho capito</button>
+    </div>
+</div>
+
+<!-- MODAL CONFERMA INVIO -->
+<div id="success-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 mx-4 max-w-md w-full text-center fade-in">
+        <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
+            <svg class="w-10 h-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <h3 class="text-2xl font-extrabold text-[#003B5C] mb-2">Report Inviato!</h3>
+        <p class="text-gray-600 mb-1">Abbiamo inviato la tua analisi previdenziale personalizzata a:</p>
+        <p id="success-email" class="font-bold text-[#005A78] text-lg mb-4"></p>
+        <p id="success-status" class="text-sm font-medium mb-3"></p>
+        <p class="text-sm text-gray-500 mb-6">Controlla anche la cartella spam. Il PDF contiene tutti i dettagli del tuo vantaggio pensionistico.</p>
+        <div class="space-y-3">
+            <button id="success-download" class="w-full bg-[#005A78] hover:bg-[#004860] text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Scarica il PDF ora
+            </button>
+            <button id="success-close" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-xl transition-colors">Visualizza l'Analisi Completa</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ===================== CONFIGURAZIONE =====================
+const parametri = {
+    tfr_aliquota: 7.41,
+    tfr_rendimento_stimato: 2.0,
+    fondo_rendimento_stimato: 4.0,
+    investimento_privato_rendimento: 3.5,
+    tassazione_rendite_fondo: 20.0,
+    tassazione_rendite_privato: 26.0,
+    fondo_tassazione_base: 15,
+    fondo_tassazione_minima: 9,
+    riduzione_annua: 0.3,
+    limite_deducibilita: 5164.57,
+    assegno_sociale_annuo_2025: 6947.33
+};
+const aliquoteIrpef2025 = [
+    { soglia: 28000, aliquota: 23 },
+    { soglia: 50000, aliquota: 35 },
+    { soglia: Infinity, aliquota: 43 }
+];
+const ccnlContribuiti = {
+    'Metalmeccanico': { lavoratore: 1.2, datore: 2.0 },
+    'Commercio':      { lavoratore: 0.55, datore: 1.55 },
+    'Turismo':        { lavoratore: 0.55, datore: 0.55 },
+    'Chimico':        { lavoratore: 1.06, datore: 1.56 },
+    'Altro':          { lavoratore: 0, datore: 1.5 }
+};
+const coefficientiConversione = { 60:0.045, 62:0.047, 64:0.050, 67:0.054, 70:0.059 };
+const GEMINI_URL = "./gemini-proxy.php";
+
+let comparisonChart, advantageChart;
+let currentResults = {};
+let isFreelance = false;
+let isForfettario = false;
+let appState = 'idle'; // 'idle' | 'calculated' | 'unlocked'
+let leadData = {};
+
+const fmtMoney = new Intl.NumberFormat('it-IT', { style:'currency', currency:'EUR', maximumFractionDigits:0 }).format;
+const fmtPerc  = n => `${n.toFixed(1).replace('.', ',')}%`;
+
+// ===================== STATO UI =====================
+function setAppState(state) {
+    appState = state;
+    document.getElementById('stato-idle').classList.toggle('hidden', state !== 'idle');
+    document.getElementById('stato-calcolato').classList.toggle('hidden', state !== 'calculated');
+    document.getElementById('stato-sbloccato').classList.toggle('hidden', state !== 'unlocked');
+}
+
+// ===================== TOGGLE PROFILO =====================
+function toggleUserType() {
+    const selector = document.querySelector('input[name="tipo-lavoro"]:checked').value;
+    isFreelance = (selector === 'autonomo');
+    const sectionDip = document.getElementById('section-dipendente');
+    const sectionDat = document.getElementById('section-datore');
+    const boxTfr     = document.getElementById('box-tfr-annuo');
+    const rowDatore  = document.getElementById('row-datore');
+    const boxRegime  = document.getElementById('box-regime-fiscale');
+    if (isFreelance) {
+        sectionDip.classList.add('hidden');
+        sectionDat.classList.add('opacity-50','pointer-events-none');
+        document.getElementById('contributo-datore').value = 0;
+        boxTfr.classList.add('hidden');
+        rowDatore && rowDatore.classList.add('hidden');
+        boxRegime.classList.remove('hidden');
+        document.getElementById('label-ral').textContent = "Reddito Lordo (Fatturato - Spese)";
+        document.getElementById('label-scenario-a').textContent = "Investimento Fai-da-te";
+        document.getElementById('sublabel-scenario-a').textContent = "(Capitale Netto investito in ETF/Conto)";
+        document.getElementById('label-scenario-b').textContent = "(Capitale + Vantaggio Fiscale)";
+        document.getElementById('contributo-volontario').value = 5165;
+        updateRegimeUI();
+    } else {
+        sectionDip.classList.remove('hidden');
+        sectionDat.classList.remove('opacity-50','pointer-events-none');
+        boxTfr.classList.remove('hidden');
+        rowDatore && rowDatore.classList.remove('hidden');
+        boxRegime.classList.add('hidden');
+        document.getElementById('label-ral').textContent = "Reddito Annuo Lordo (RAL)";
+        document.getElementById('label-scenario-a').textContent = "Standard (TFR in Az.)";
+        document.getElementById('sublabel-scenario-a').textContent = "(TFR in azienda + Investimento)";
+        document.getElementById('label-scenario-b').textContent = "(Fondo Pensione + Ev. TFR in Az.)";
+        isForfettario = false;
+        updateCCNLContributi();
+    }
+    calcolaVantaggio();
+}
+
+function updateRegimeUI() {
+    const toggle = document.getElementById('regime-toggle');
+    isForfettario = toggle.checked;
+    const label = document.getElementById('label-regime');
+    const info  = document.getElementById('info-regime');
+    if (isForfettario) {
+        label.textContent = "Forfettario";
+        info.textContent  = "Deduzione NON attiva. Versamenti non dedotti (tax free all'uscita).";
+        info.className    = "text-xs text-gray-500 mt-1";
+    } else {
+        label.textContent = "Ordinario";
+        info.textContent  = "Deduzione IRPEF attiva.";
+        info.className    = "text-xs text-orange-600 mt-1";
+    }
+    calcolaVantaggio();
+}
+
+function updateCCNLContributi() {
+    if (isFreelance) return;
+    const ccnl = document.getElementById('ccnl').value;
+    const conf = ccnlContribuiti[ccnl];
+    if (conf) {
+        document.getElementById('contributo-datore').value = conf.datore.toFixed(2);
+        updateContributoDatoreEuro();
+    }
+}
+function updateContributoDatoreEuro() {
+    if (isFreelance) { document.getElementById('contributo-datore-euro').textContent = "€ 0"; return; }
+    const ral     = parseFloat(document.getElementById('ral').value) || 0;
+    const perc    = parseFloat(document.getElementById('contributo-datore').value) || 0;
+    const exclude = document.getElementById('no-contributo-datore').checked;
+    const val     = exclude ? 0 : (ral * perc / 100);
+    document.getElementById('contributo-datore-euro').textContent = `= ${fmtMoney(val)}`;
+}
+
+function getAliquotaMarginale(ral) {
+    if (isForfettario) return 0;
+    for (const s of aliquoteIrpef2025) if (ral <= s.soglia) return s.aliquota;
+    return 43;
+}
+function getAliquotaMediaSeparata(ral) {
+    let marg = 43;
+    for (const s of aliquoteIrpef2025) if (ral <= s.soglia) { marg = s.aliquota; break; }
+    return Math.max(marg - 4, 23);
+}
+
+// ===================== CALCOLO =====================
+function calcolaVantaggio() {
+    const eta          = parseInt(document.getElementById('eta-attuale').value);
+    const etaPensione  = parseInt(document.getElementById('eta-pensione').value);
+    const anni         = Math.max(1, etaPensione - eta);
+    const ralStart     = parseFloat(document.getElementById('ral').value) || 0;
+    const montanteStart= parseFloat(document.getElementById('montante-iniziale').value) || 0;
+    const growthSalary = parseFloat(document.getElementById('crescita-salariale').value) / 100;
+    const volContribution = parseFloat(document.getElementById('contributo-volontario').value) || 0;
+    const usaTfr       = !isFreelance && document.getElementById('tfr-toggle').checked;
+    const excludeDatore= document.getElementById('no-contributo-datore').checked;
+    const percDatore   = isFreelance || excludeDatore ? 0 : parseFloat(document.getElementById('contributo-datore').value);
+
+    let ral = ralStart;
+    let capitaleNominaleDedotto    = montanteStart;
+    let capitaleNominaleNonDedotto = 0;
+    let rendimentiNettiAccumulati  = 0;
+    let tfrAziendaAccumulatoA      = 0;
+    let tfrAziendaAccumulatoB      = 0;
+    let investAlternativo          = 0;
+    let risparmioFiscaleCash       = 0;
+    let accumuloDatoreNominale     = 0;
+
+    for (let i = 0; i < anni; i++) {
+        if (i > 0) ral *= (1 + growthSalary);
+        const aliquotaMarginale = getAliquotaMarginale(ral);
+        const quotaTfr   = isFreelance ? 0 : (ral * parametri.tfr_aliquota / 100);
+        const quotaDatore = (ral * percDatore / 100);
+
+        let quotaDeducibileVolontaria = 0, quotaNonDedottaVolontaria = 0, risparmioAnno = 0;
+        if (isForfettario) {
+            quotaNonDedottaVolontaria = volContribution;
+        } else {
+            const spazioPlafond = Math.max(0, parametri.limite_deducibilita - quotaDatore);
+            quotaDeducibileVolontaria    = Math.min(volContribution, spazioPlafond);
+            quotaNonDedottaVolontaria    = volContribution - quotaDeducibileVolontaria;
+            risparmioAnno = quotaDeducibileVolontaria * (aliquotaMarginale / 100);
+        }
+
+        risparmioFiscaleCash   += risparmioAnno;
+        accumuloDatoreNominale += quotaDatore;
+
+        const versamentoTfrFondo  = usaTfr ? quotaTfr : 0;
+        const nuovoCapitaleDedotto   = quotaDatore + quotaDeducibileVolontaria + versamentoTfrFondo;
+        const nuovoCapitaleNonDedotto= quotaNonDedottaVolontaria;
+        const montanteTotaleFondo    = capitaleNominaleDedotto + capitaleNominaleNonDedotto + rendimentiNettiAccumulati;
+        const rendimentoLordoAnno    = montanteTotaleFondo * (parametri.fondo_rendimento_stimato / 100);
+        const rendimentoNettoAnno    = rendimentoLordoAnno * (1 - parametri.tassazione_rendite_fondo / 100);
+        capitaleNominaleDedotto    += nuovoCapitaleDedotto;
+        capitaleNominaleNonDedotto += nuovoCapitaleNonDedotto;
+        rendimentiNettiAccumulati  += rendimentoNettoAnno;
+
+        if (!isFreelance) {
+            tfrAziendaAccumulatoA = tfrAziendaAccumulatoA * (1 + parametri.tfr_rendimento_stimato/100) + quotaTfr;
+            if (!usaTfr) tfrAziendaAccumulatoB = tfrAziendaAccumulatoB * (1 + parametri.tfr_rendimento_stimato/100) + quotaTfr;
+        }
+
+        const costoNettoSostenuto = volContribution - risparmioAnno;
+        if (costoNettoSostenuto > 0) {
+            const rendAlt   = investAlternativo * (parametri.investimento_privato_rendimento/100);
+            const tasseAlt  = rendAlt * (parametri.tassazione_rendite_privato/100);
+            investAlternativo += rendAlt - tasseAlt + costoNettoSostenuto;
+        }
+    }
+
+    let aliquotaFinaleFondo = parametri.fondo_tassazione_base;
+    if (anni > 15) aliquotaFinaleFondo = Math.max(9, 15 - (anni-15)*0.3);
+
+    const tasseUscitaFondo = capitaleNominaleDedotto * (aliquotaFinaleFondo/100);
+    const fondoNetto       = (capitaleNominaleDedotto + capitaleNominaleNonDedotto + rendimentiNettiAccumulati) - tasseUscitaFondo;
+    const aliquotaTfr      = !isFreelance ? getAliquotaMediaSeparata(ral) : 0;
+    const tfrNettoAziendaA = !isFreelance ? tfrAziendaAccumulatoA * (1 - aliquotaTfr/100) : 0;
+    const tfrNettoAziendaB = !isFreelance ? tfrAziendaAccumulatoB * (1 - aliquotaTfr/100) : 0;
+
+    const totaleScenarioA = investAlternativo + tfrNettoAziendaA;
+    const totaleScenarioB = fondoNetto + tfrNettoAziendaB;
+    const vantaggioTotale = totaleScenarioB - totaleScenarioA;
+    const valoreNettoDatore = accumuloDatoreNominale * (1 - aliquotaFinaleFondo/100);
+    const otherAdv  = vantaggioTotale - valoreNettoDatore;
+    const visualTasse     = otherAdv * 0.4;
+    const visualRendimenti= otherAdv * 0.6;
+
+    // Aggiorna entrambi i pannelli
+    ['', '-2'].forEach(sfx => {
+        const el = document.getElementById('vantaggio-totale' + sfx);
+        const ep = document.getElementById('vantaggio-percentuale' + sfx);
+        if (el) { const sign = vantaggioTotale >= 0 ? '+' : ''; el.textContent = `${sign}${fmtMoney(vantaggioTotale)}`; }
+        if (ep) { const sign = vantaggioTotale >= 0 ? '+' : ''; const perc = totaleScenarioA > 0 ? vantaggioTotale/totaleScenarioA*100 : 0; ep.textContent = `${sign}${fmtPerc(perc)}`; }
+    });
+
+    document.getElementById('tfr-netto').textContent  = fmtMoney(totaleScenarioA);
+    document.getElementById('fondo-netto').textContent = fmtMoney(totaleScenarioB);
+    document.getElementById('risparmio-versamenti').textContent     = fmtMoney(risparmioFiscaleCash);
+    document.getElementById('valore-contributo-datore').textContent = fmtMoney(valoreNettoDatore);
+    document.getElementById('maggior-capitale').textContent         = fmtMoney(visualRendimenti);
+    document.getElementById('vantaggio-pensionamento').textContent  = fmtMoney(visualTasse);
+
+    currentResults = {
+        eta, etaPensione, anni, ral: ralStart, vantaggioTotale,
+        fondoNetto, totaleScenarioA, totaleScenarioB,
+        risparmioFiscaleCash, valoreNettoDatore, visualRendimenti, visualTasse,
+        aliquotaFinaleFondo, isFreelance, isForfettario,
+        volContribution, percDatore,
+        ccnl: !isFreelance ? document.getElementById('ccnl').value : 'N/A',
+        usaTfr, montanteStart
+    };
+
+    if (appState === 'unlocked') {
+        updateCharts(totaleScenarioA, totaleScenarioB, visualRendimenti, visualTasse, valoreNettoDatore);
+        calcolaErogazione();
+    }
+
+    if (appState === 'idle') setAppState('calculated');
+}
+
+function calcolaErogazione() {
+    const { fondoNetto, etaPensione } = currentResults;
+    if (!fondoNetto) return;
+    const slider = document.getElementById('erogazione-capitale-perc');
+    const perc   = parseInt(slider.value);
+    let coeff    = 0.045;
+    for (const [age, val] of Object.entries(coefficientiConversione)) {
+        if (etaPensione >= age) coeff = val;
+    }
+    const montante70    = fondoNetto * 0.70;
+    const renditaAnnua70= montante70 * coeff;
+    const soglia        = parametri.assegno_sociale_annuo_2025 * 0.5;
+    const info          = document.getElementById('regola-capitale-info');
+    if (renditaAnnua70 < soglia) {
+        slider.max = 100;
+        info.innerHTML = "<span class='text-green-700 font-bold bg-green-50 p-1 rounded'>✅ Rendita esigua: Puoi ritirare il 100% in capitale.</span>";
+    } else {
+        slider.max = 50;
+        if (perc > 50) slider.value = 50;
+        info.textContent = "Limite di legge: Max 50% in capitale.";
+    }
+    document.getElementById('perc-capitale-display').textContent = `${slider.value}%`;
+    document.getElementById('perc-rendita-display').textContent  = `${100 - slider.value}%`;
+    const capNetto         = fondoNetto * (slider.value/100);
+    const montanteRendita  = fondoNetto * ((100-slider.value)/100);
+    const renditaMensile   = (montanteRendita * coeff) / 13;
+    document.getElementById('capitale-subito-netto').textContent  = fmtMoney(capNetto);
+    document.getElementById('rendita-mensile-lorda').textContent  = fmtMoney(renditaMensile);
+}
+
+// ===================== GRAFICI =====================
+function updateCharts(valA, valB, rendimenti, tasse, datore) {
+    const ctxComp = document.getElementById('comparison-chart').getContext('2d');
+    const labelA  = isFreelance ? "Fai-da-te" : "Standard (TFR)";
+    if (comparisonChart) comparisonChart.destroy();
+    comparisonChart = new Chart(ctxComp, {
+        type: 'bar',
+        data: { labels: [labelA, "Con Fondo Pensione"], datasets: [{ data:[valA,valB], backgroundColor:['#e5e7eb','#005A78'], borderRadius:8, barThickness:50 }] },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ y:{display:false}, x:{grid:{display:false}} } }
+    });
+    const ctxAdv = document.getElementById('advantage-chart').getContext('2d');
+    if (advantageChart) advantageChart.destroy();
+    advantageChart = new Chart(ctxAdv, {
+        type: 'doughnut',
+        data: { labels:['Rendimenti','Fisco','Datore'], datasets:[{ data:[Math.max(0,rendimenti),Math.max(0,tasse),Math.max(0,datore)], backgroundColor:['#009FBD','#f9b572','#C2D9FF'], borderWidth:0 }] },
+        options: { responsive:true, maintainAspectRatio:false, cutout:'70%', plugins:{ legend:{position:'bottom',labels:{boxWidth:10}} } }
+    });
+}
+
+// ===================== GEMINI AI =====================
+async function callGemini(prompt) {
+    try {
+        const res  = await fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message: prompt }) });
+        const data = await res.json();
+        if (data.error) return "Errore: " + (data.error.message || data.error);
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || "Nessuna risposta dall'AI.";
+    } catch(e) { return "Errore di connessione al server."; }
+}
+async function runAnalysis() {
+    const container   = document.getElementById('gemini-analysis-container');
+    const textEl      = document.getElementById('gemini-analysis-text');
+    const spinner     = document.getElementById('gemini-spinner');
+    const placeholder = document.getElementById('gemini-placeholder');
+    container.classList.remove('hidden');
+    placeholder.classList.add('hidden');
+    spinner.classList.remove('hidden');
+    textEl.innerHTML = '';
+    const tipo   = isFreelance ? (isForfettario ? "Forfettario" : "Autonomo Ordinario") : "Dipendente";
+    const { eta, anni, vantaggioTotale } = currentResults;
+    const prompt = `Analisi finanziaria sintetica: Profilo: ${tipo}, Età: ${eta}, Orizzonte: ${anni} anni, Vantaggio Netto: ${fmtMoney(vantaggioTotale)}. Fornisci 3 bullet point tecnici su efficienza fiscale e montante. NO Markdown. Solo testo.`;
+    const response = await callGemini(prompt);
+    spinner.classList.add('hidden');
+    textEl.innerHTML = response.replace(/\n/g,'<br>').replace(/[*#_]/g,'');
+}
+async function runExplanation() {
+    const modal = document.getElementById('explanation-modal');
+    modal.classList.remove('hidden');
+    document.getElementById('explanation-spinner').classList.remove('hidden');
+    document.getElementById('explanation-text').textContent = '';
+    const prompt = `Spiega il vantaggio di ${fmtMoney(currentResults.vantaggioTotale)} focalizzandoti su: 1. Tassazione separata TFR vs tassazione agevolata Fondo. 2. Deduzione fiscale. 3. Imposta sostitutiva sui rendimenti. Linguaggio tecnico ma chiaro. NO Markdown.`;
+    const res = await callGemini(prompt);
+    document.getElementById('explanation-spinner').classList.add('hidden');
+    document.getElementById('explanation-text').innerHTML = res.replace(/\n/g,'<br>').replace(/[*#_]/g,'');
+}
+
+// ===================== FORM LEAD =====================
+function validateLeadForm() {
+    let valid = true;
+    const nome     = document.getElementById('lead-nome').value.trim();
+    const cognome  = document.getElementById('lead-cognome').value.trim();
+    const telefono = document.getElementById('lead-telefono').value.trim();
+    const email    = document.getElementById('lead-email').value.trim();
+    const privacy  = document.getElementById('lead-privacy').checked;
+
+    const showErr = (id, show) => { const el = document.getElementById(id); if(el) el.classList.toggle('hidden', !show); };
+    const hilite  = (id, bad)  => { const el = document.getElementById(id); if(el) { el.classList.toggle('border-red-400', bad); el.classList.toggle('ring-red-200', bad); } };
+
+    showErr('err-nome',     !nome);     hilite('lead-nome',     !nome);
+    showErr('err-cognome',  !cognome);  hilite('lead-cognome',  !cognome);
+    const telOk = /^[0-9\s\+\-]{8,}$/.test(telefono);
+    showErr('err-telefono', !telOk);    hilite('lead-telefono', !telOk);
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    showErr('err-email',    !emailOk);  hilite('lead-email',    !emailOk);
+    showErr('err-privacy',  !privacy);
+
+    if (!nome||!cognome||!telOk||!emailOk||!privacy) valid = false;
+    return valid;
+}
+
+document.getElementById('lead-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    if (!validateLeadForm()) return;
+
+    leadData = {
+        nome:     document.getElementById('lead-nome').value.trim(),
+        cognome:  document.getElementById('lead-cognome').value.trim(),
+        telefono: document.getElementById('lead-telefono').value.trim(),
+        email:    document.getElementById('lead-email').value.trim(),
+    };
+
+    const btn    = document.getElementById('lead-submit-btn');
+    const btnTxt = document.getElementById('lead-btn-text');
+    btn.disabled = true;
+    btnTxt.textContent = "Elaborazione in corso...";
+    btn.classList.add('opacity-70', 'cursor-not-allowed');
+
+    // Genera PDF completo con grafici
+    const pdfDoc = generatePDF();
+    const pdfBase64 = pdfDoc.output('datauristring').split(',')[1];
+
+    // Invia email via backend PHP
+    let emailSent = false;
+    let emailError = null;
+    try {
+        const res = await fetch('./invia-report.php', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                nome: leadData.nome,
+                cognome: leadData.cognome,
+                telefono: leadData.telefono,
+                email: leadData.email,
+                vantaggio: fmtMoney(currentResults.vantaggioTotale),
+                pdf: pdfBase64
+            })
+        });
+        const data = await res.json();
+        emailSent = data.success === true;
+        if (!emailSent) emailError = data.error || "Errore invio";
+    } catch(err) {
+        emailError = "Errore di connessione al server";
+        console.error('Send error:', err);
+    }
+
+    // Sblocca analisi
+    setAppState('unlocked');
+    updateCharts(currentResults.totaleScenarioA, currentResults.totaleScenarioB, currentResults.visualRendimenti, currentResults.visualTasse, currentResults.valoreNettoDatore);
+    calcolaErogazione();
+
+    // Mostra modale di conferma
+    document.getElementById('success-email').textContent = leadData.email;
+    const statusEl = document.getElementById('success-status');
+    if (statusEl) {
+        if (emailSent) {
+            statusEl.innerHTML = '<span class="text-green-700">\u2713 Email inviata correttamente</span>';
+        } else {
+            // Errore SMTP: messaggio generico per i lead. Diagnostica completa
+            // solo se la pagina \u00e8 aperta con ?debug=1 (admin/test).
+            const isDebug = new URLSearchParams(location.search).get('debug') === '1';
+            let html =
+                '<div class="text-amber-700 font-semibold">\u26a0 Invio email temporaneamente non disponibile.</div>' +
+                '<div class="text-xs text-gray-500 mt-1">Puoi scaricare il PDF qui sotto. Per assistenza scrivi a <strong>domenico.mosca@pfafineco.it</strong>.</div>';
+            if (isDebug) {
+                const safeErr = String(emailError || 'Errore sconosciuto')
+                    .replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+                html += '<div class="text-[10px] text-gray-400 mt-2 font-mono break-all">[debug] ' + safeErr + '</div>';
+            }
+            statusEl.innerHTML = html;
+            // L'errore completo resta sempre disponibile in console per i log
+            // del browser e nei log server-side (FastAPI logger).
+            if (emailError) console.warn('[send-report] errore backend:', emailError);
+        }
+    }
+    document.getElementById('success-modal').classList.remove('hidden');
+
+    // Funzione download per i bottoni nel modale
+    window._pdfDoc = pdfDoc;
+
+    btn.disabled = false;
+    btnTxt.textContent = "Sblocca Analisi e Ricevi il PDF";
+    btn.classList.remove('opacity-70', 'cursor-not-allowed');
+});
+
+// ===================== GENERAZIONE PDF =====================
+function generatePDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    // ---- PALETTE ----
+    const blu    = [0,59,92];
+    const teal   = [0,90,120];
+    const verde  = [22,101,52];
+    const verdeFill = [240,253,244];
+    const verdeAccent = [34,197,94];
+    const grigio = [100,116,139];
+    const bianco = [255,255,255];
+    const ARANCIO= [249,181,114];
+    const CIANO  = [0,159,189];
+    const INDACO = [126,142,241];
+    const AZZURRO= [194,217,255];
+    const W = 210, H = 297, M = 14;
+    const FOOTER_Y = H - 20;  // footer inizia qui
+    const SAFE_BOTTOM = FOOTER_Y - 8; // area sicura contenuto
+
+    const sign = currentResults.vantaggioTotale >= 0 ? '+' : '';
+
+    // ---- HELPER: disegna footer (teal band) ----
+    function drawFooter(pageN, totalP) {
+        doc.setFillColor(...teal);
+        doc.rect(0, FOOTER_Y, W, 20, 'F');
+        doc.setTextColor(...bianco);
+        doc.setFontSize(8.5); doc.setFont(undefined, 'bold');
+        doc.text('Domenico Mosca | Consulente Finanziario FinecoBank', W/2, FOOTER_Y + 7, {align:'center'});
+        doc.setFont(undefined, 'normal'); doc.setFontSize(6.5);
+        doc.text(
+            'Simulazione a scopo informativo. Non costituisce consulenza finanziaria ai sensi del D.Lgs. 58/98. Dati soggetti a variazioni normative.',
+            W/2, FOOTER_Y + 13, {align:'center'}
+        );
+        doc.setFontSize(7); doc.setTextColor(194,217,255);
+        doc.text(`Pag. ${pageN}${totalP ? ' / '+totalP : ''}`, W - M, FOOTER_Y + 13, {align:'right'});
+    }
+
+    // ---- HELPER: mini header per pagine successive ----
+    function drawMiniHeader() {
+        doc.setFillColor(...blu);
+        doc.rect(0, 0, W, 12, 'F');
+        doc.setTextColor(...bianco);
+        doc.setFontSize(8); doc.setFont(undefined, 'bold');
+        doc.text('Report Previdenziale', M, 8);
+        doc.setFont(undefined, 'normal');
+        doc.text(`${leadData.nome} ${leadData.cognome}  ·  ${new Date().toLocaleDateString('it-IT')}`, W - M, 8, {align:'right'});
+    }
+
+    // ---- HELPER: intestazione di sezione ----
+    function sectionTitle(label, y) {
+        doc.setTextColor(...blu); doc.setFontSize(12); doc.setFont(undefined, 'bold');
+        doc.text(label, M, y);
+        doc.setDrawColor(...teal); doc.setLineWidth(0.35);
+        doc.line(M, y + 2, W - M, y + 2);
+        return y + 9;
+    }
+
+    // ---- HELPER: disegna donut jsPDF ----
+    function drawDonut(segs, cx, cy, rOut, rIn) {
+        const totV = segs.reduce((a,s)=>a+s.val, 0);
+        let ang = -Math.PI/2;
+        if (totV > 0) {
+            segs.forEach(s => {
+                const span = (s.val/totV) * Math.PI*2;
+                if (span <= 0) return;
+                const steps = Math.max(4, Math.ceil(span / 0.08));
+                doc.setFillColor(...s.col);
+                for (let i=0; i<steps; i++) {
+                    const a1 = ang + span*i/steps, a2 = ang + span*(i+1)/steps;
+                    doc.triangle(
+                        cx+Math.cos(a1)*rOut, cy+Math.sin(a1)*rOut,
+                        cx+Math.cos(a2)*rOut, cy+Math.sin(a2)*rOut,
+                        cx, cy, 'F');
+                }
+                ang += span;
+            });
+        } else {
+            doc.setFillColor(220,220,220); doc.circle(cx, cy, rOut, 'F');
+        }
+        doc.setFillColor(...bianco); doc.circle(cx, cy, rIn, 'F');
+        return totV;
+    }
+
+    // ================================================================
+    // PAGINA 1 — Header + vantaggio + descrizione + confronto scenari
+    // ================================================================
+
+    // Header gradient
+    doc.setFillColor(...blu); doc.rect(0, 0, W, 46, 'F');
+    doc.setFillColor(...teal); doc.rect(0, 38, W, 8, 'F');
+    doc.setTextColor(...bianco);
+    doc.setFontSize(22); doc.setFont(undefined, 'bold');
+    doc.text('Report Previdenziale Personalizzato', W/2, 18, {align:'center'});
+    doc.setFontSize(10); doc.setFont(undefined, 'normal');
+    doc.text(`${leadData.nome} ${leadData.cognome}  ·  ${new Date().toLocaleDateString('it-IT')}`, W/2, 28, {align:'center'});
+    doc.setFontSize(8);
+    doc.text('Domenico Mosca — Consulente Finanziario FinecoBank  ·  Tel. 331 7849240  ·  domenico.mosca@pfafineco.it', W/2, 43, {align:'center'});
+
+    let y = 58;
+
+    // BIG NUMBER
+    doc.setFillColor(...verdeFill);
+    doc.roundedRect(M, y, W-M*2, 34, 3, 3, 'F');
+    doc.setDrawColor(...verdeAccent); doc.setLineWidth(0.8);
+    doc.roundedRect(M, y, W-M*2, 34, 3, 3, 'S');
+    doc.setTextColor(...verde); doc.setFontSize(9.5); doc.setFont(undefined, 'bold');
+    doc.text('VANTAGGIO NETTO STIMATO', M+6, y+8);
+    doc.setFont(undefined, 'normal'); doc.setFontSize(7.5); doc.setTextColor(34,101,52);
+    doc.text('rispetto all\'alternativa standard (TFR azienda o investimento fai-da-te)', M+6, y+13);
+    doc.setFontSize(28); doc.setFont(undefined, 'bold'); doc.setTextColor(...verde);
+    doc.text(`${sign}${fmtMoney(currentResults.vantaggioTotale)}`, M+6, y+28);
+    const percV = currentResults.totaleScenarioA > 0
+        ? currentResults.vantaggioTotale / currentResults.totaleScenarioA * 100 : 0;
+    doc.setFillColor(...verdeAccent);
+    doc.roundedRect(W-56, y+18, 42, 10, 2, 2, 'F');
+    doc.setTextColor(...bianco); doc.setFontSize(12); doc.setFont(undefined, 'bold');
+    doc.text(`${sign}${fmtPerc(percV)}`, W-35, y+25, {align:'center'});
+    y += 42;
+
+    // Riquadro descrittivo
+    {
+        const profiloLbl = isFreelance
+            ? (isForfettario ? 'Professionista Forfettario' : 'Professionista Ordinario')
+            : 'Dipendente';
+        const datoreAnno = currentResults.ral * (currentResults.percDatore || 0) / 100;
+        const righe = [
+            `Profilo: ${profiloLbl}  |  Orizzonte: ${currentResults.anni} anni  |  Reddito lordo: ${fmtMoney(currentResults.ral)}/anno  |  Rendimento fondo: ${parametri.fondo_rendimento_stimato}% lordo`,
+            '',
+            `Il vantaggio totale di ${sign}${fmtMoney(currentResults.vantaggioTotale)} è la somma di quattro leve previdenziali:`,
+            `  • Risparmio fiscale IRPEF sui versamenti dedotti: ${fmtMoney(Math.max(0,currentResults.risparmioFiscaleCash))}`,
+            `  • Maggiori rendimenti netti del fondo vs investimento alternativo: ${fmtMoney(Math.max(0,currentResults.visualRendimenti))}`,
+            `  • Vantaggio tassazione finale agevolata (${currentResults.aliquotaFinaleFondo.toFixed(1)}% vs tassazione separata): ${fmtMoney(Math.max(0,currentResults.visualTasse))}`,
+            !isFreelance && datoreAnno > 0
+                ? `  • Contributo datore (${currentResults.percDatore}% RAL ≈ ${fmtMoney(datoreAnno)}/anno, netto finale): ${fmtMoney(Math.max(0,currentResults.valoreNettoDatore))}`
+                : `  • Contributo datore: non applicabile per il profilo selezionato`,
+        ];
+        const boxH = 10 + righe.length * 5.2;
+        doc.setFillColor(246,249,252);
+        doc.roundedRect(M, y, W-M*2, boxH, 3, 3, 'F');
+        doc.setDrawColor(...teal); doc.setLineWidth(0.2);
+        doc.roundedRect(M, y, W-M*2, boxH, 3, 3, 'S');
+        doc.setFillColor(...teal); doc.roundedRect(M, y, 3, boxH, 1.5, 1.5, 'F');
+        doc.setTextColor(...blu); doc.setFontSize(9); doc.setFont(undefined, 'bold');
+        doc.text('Da dove deriva il tuo vantaggio', M+7, y+6);
+        doc.setFont(undefined, 'normal'); doc.setFontSize(8); doc.setTextColor(40,55,71);
+        let ly = y+11;
+        righe.forEach(r => {
+            if (r === '') { ly += 1.5; return; }
+            const lines = doc.splitTextToSize(r, W-M*2-12);
+            doc.text(lines, M+7, ly);
+            ly += lines.length * 5.2;
+        });
+        y += boxH + 8;
+    }
+
+    // Confronto Scenari (bar chart)
+    y = sectionTitle('Confronto Scenari', y);
+    {
+        const valA = currentResults.totaleScenarioA;
+        const valB = currentResults.totaleScenarioB;
+        const maxV = Math.max(valA, valB, 1);
+        const cH = 48, cX = M + 10, cW = W - M*2 - 20, bW = 34;
+        doc.setDrawColor(220,220,220); doc.setLineWidth(0.3);
+        doc.line(cX, y+cH, cX+cW, y+cH);
+        // Barra A
+        const hA = (valA/maxV)*cH;
+        doc.setFillColor(220,225,235);
+        doc.roundedRect(cX+cW*0.2-bW/2, y+cH-hA, bW, hA, 2, 2, 'F');
+        doc.setTextColor(30,41,59); doc.setFontSize(9.5); doc.setFont(undefined,'bold');
+        doc.text(fmtMoney(valA), cX+cW*0.2, y+cH-hA-4, {align:'center'});
+        doc.setFontSize(7.5); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
+        doc.text(isFreelance ? 'Investimento Fai-da-te' : 'TFR in Azienda', cX+cW*0.2, y+cH+5, {align:'center'});
+        // Barra B
+        const hB = (valB/maxV)*cH;
+        doc.setFillColor(...teal);
+        doc.roundedRect(cX+cW*0.7-bW/2, y+cH-hB, bW, hB, 2, 2, 'F');
+        doc.setTextColor(...teal); doc.setFontSize(9.5); doc.setFont(undefined,'bold');
+        doc.text(fmtMoney(valB), cX+cW*0.7, y+cH-hB-4, {align:'center'});
+        doc.setFontSize(7.5); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
+        doc.text('Con Fondo Pensione', cX+cW*0.7, y+cH+5, {align:'center'});
+        // Delta freccia
+        const delta = valB - valA;
+        const dSign = delta >= 0 ? '+' : '';
+        doc.setFillColor(240,253,244); doc.roundedRect(W/2-22, y+cH-12, 44, 10, 2, 2, 'F');
+        doc.setTextColor(...verde); doc.setFontSize(9); doc.setFont(undefined,'bold');
+        doc.text(`${dSign}${fmtMoney(delta)}`, W/2, y+cH-5, {align:'center'});
+        y += cH + 14;
+    }
+
+    drawFooter(1, 3);
+
+    // ================================================================
+    // PAGINA 2 — Profilo + Composizione + Dettaglio + Erogazione + Note
+    // ================================================================
+    doc.addPage();
+    drawMiniHeader();
+    y = 22;
+
+    // ---- IL TUO PROFILO ----
+    y = sectionTitle('Il tuo Profilo', y);
+    {
+        const datoreAnnoEur = currentResults.ral * (currentResults.percDatore || 0) / 100;
+        const profilo = [
+            ['Tipo di profilo',   isFreelance ? (isForfettario ? 'Prof. Forfettario' : 'Prof. Ordinario') : 'Dipendente',
+             'Età attuale',       `${currentResults.eta} anni`],
+            ['Età di pensionamento', `${currentResults.etaPensione} anni`,
+             'Orizzonte temporale',  `${currentResults.anni} anni`],
+            ['Reddito Lordo',     fmtMoney(currentResults.ral) + ' /anno',
+             'CCNL',              isFreelance ? 'N/A' : (currentResults.ccnl || 'N/A')],
+            ['Versamento annuo',  fmtMoney(currentResults.volContribution),
+             'Contributo datore', datoreAnnoEur > 0 ? `${currentResults.percDatore}% = ${fmtMoney(datoreAnnoEur)}/a` : 'Non presente'],
+            ['Cap. già versato',  fmtMoney(currentResults.montanteStart || 0),
+             'Regime fiscale',    isFreelance ? (isForfettario ? 'Forfettario' : 'Ordinario') : 'IRPEF ordinario'],
+        ];
+        const cw = (W - M*2) / 2;
+        const rowH = 12;
+        // Pass 1: tutti i background (zebra)
+        profilo.forEach((row, ri) => {
+            if (ri % 2 === 0) {
+                const py = y + ri * rowH;
+                doc.setFillColor(247,250,253);
+                doc.rect(M, py-2, W-M*2, rowH, 'F');
+            }
+        });
+        // Pass 2: tutto il testo sopra i background
+        profilo.forEach((row, ri) => {
+            const py = y + ri * rowH;
+            [0,1].forEach(col => {
+                const px = M + col * cw;
+                const lbl = row[col*2], val = row[col*2+1];
+                doc.setFontSize(8); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
+                doc.text(lbl + ':', px + 4, py+4);
+                doc.setFont(undefined,'bold'); doc.setTextColor(25,35,50); doc.setFontSize(9);
+                doc.text(val, px + 4, py+9);
+            });
+        });
+        y += profilo.length * rowH + 8;
+    }
+
+    // ---- COMPOSIZIONE DEL VANTAGGIO ----
+    y = sectionTitle('Composizione del Vantaggio', y);
+    {
+        const segs = [
+            {lbl:'Risparmio Fiscale IRPEF',  val: Math.max(0,currentResults.risparmioFiscaleCash), col: ARANCIO},
+            {lbl:'Maggiori Rendimenti Netti', val: Math.max(0,currentResults.visualRendimenti),     col: CIANO},
+            {lbl:'Vantaggio Tass. Finale',    val: Math.max(0,currentResults.visualTasse),          col: INDACO},
+            {lbl:'Contributo Datore',         val: Math.max(0,currentResults.valoreNettoDatore),    col: AZZURRO},
+        ];
+        const totSegs = segs.reduce((a,s)=>a+s.val, 0);
+
+        // Donut più grande
+        const cx = M + 28, cy = y + 32, rOut = 26, rIn = 15;
+        drawDonut(segs, cx, cy, rOut, rIn);
+        // Label centro
+        doc.setTextColor(...blu); doc.setFontSize(7); doc.setFont(undefined,'bold');
+        doc.text('TOTALE', cx, cy-3, {align:'center'});
+        doc.setFontSize(8.5);
+        doc.text(fmtMoney(totSegs), cx, cy+4, {align:'center'});
+
+        // Legenda a destra del donut, 4 righe
+        const lx = M + 64;
+        segs.forEach((s, i) => {
+            const ly = y + 4 + i * 16;
+            // sfondo riga alternato
+            if (i % 2 === 0) {
+                doc.setFillColor(248,250,252); doc.rect(lx-2, ly-4, W-lx-M+2, 15, 'F');
+            }
+            doc.setFillColor(...s.col);
+            doc.roundedRect(lx, ly-1, 6, 6, 1, 1, 'F');
+            doc.setTextColor(40,50,60); doc.setFontSize(8.5); doc.setFont(undefined,'bold');
+            doc.text(s.lbl, lx+9, ly+4);
+            doc.setFontSize(10); doc.setFont(undefined,'bold'); doc.setTextColor(...blu);
+            doc.text(fmtMoney(s.val), W-M, ly+4, {align:'right'});
+            doc.setFontSize(7.5); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
+            const pct = totSegs > 0 ? (s.val/totSegs*100).toFixed(1) : '0.0';
+            doc.text(`${pct}% del totale`, W-M, ly+9, {align:'right'});
+        });
+        y += 72;
+    }
+
+    // ---- DETTAGLIO ANALITICO ----
+    y = sectionTitle('Dettaglio Analitico', y);
+    {
+        const rows = [
+            ['Capitale fondo pensione (lordo)', fmtMoney(currentResults.fondoNetto + (currentResults.fondoNetto * currentResults.aliquotaFinaleFondo / (100 - currentResults.aliquotaFinaleFondo) || 0))],
+            ['Aliquota fiscale finale fondo', `${currentResults.aliquotaFinaleFondo.toFixed(1)}% (calcolata su ${currentResults.anni} anni — min. 9%, max. 15%)`],
+            ['Capitale fondo netto (dopo imposte)', fmtMoney(currentResults.fondoNetto)],
+            ['Scenario alternativo netto', fmtMoney(currentResults.totaleScenarioA)],
+            ['Scenario con fondo netto', fmtMoney(currentResults.totaleScenarioB)],
+            ['Vantaggio netto totale', `${sign}${fmtMoney(currentResults.vantaggioTotale)}`],
+        ];
+        rows.forEach((r, i) => {
+            const ry = y + i * 9;
+            if (i % 2 === 0) { doc.setFillColor(247,250,253); doc.rect(M, ry-2, W-M*2, 9, 'F'); }
+            const isLast = i === rows.length - 1;
+            if (isLast) { doc.setFillColor(240,253,244); doc.rect(M, ry-2, W-M*2, 9, 'F'); }
+            doc.setFontSize(8); doc.setFont(undefined,'normal');
+            if (isLast) doc.setTextColor(...verde); else doc.setTextColor(...grigio);
+            doc.text(r[0], M+4, ry+4);
+            doc.setFont(undefined,'bold');
+            if (isLast) doc.setTextColor(...verde); else doc.setTextColor(25,35,50);
+            doc.text(r[1], W-M, ry+4, {align:'right'});
+        });
+        y += rows.length * 9 + 8;
+    }
+
+    drawFooter(2, 3);
+
+    // ================================================================
+    // PAGINA 3 — Proiezione Erogazione + Note Tecniche + Contatti
+    // ================================================================
+    doc.addPage();
+    drawMiniHeader();
+    y = 22;
+
+    // ---- RENDITA / CAPITALE ----
+    y = sectionTitle('Proiezione Erogazione a Fine Carriera', y);
+    {
+        const coeff = (() => {
+            const ep = currentResults.etaPensione;
+            const map = [[70,0.059],[67,0.054],[64,0.050],[62,0.047],[60,0.045]];
+            for (const [age,v] of map) if (ep >= age) return v;
+            return 0.045;
+        })();
+        const soglia = parametri.assegno_sociale_annuo_2025 * 0.5;
+        const montante70 = currentResults.fondoNetto * 0.70;
+        const renditaTest = montante70 * coeff;
+        const canAllCapital = renditaTest < soglia;
+        const maxCapPerc = canAllCapital ? 100 : 50;
+
+        const scenarios = [
+            { lbl: 'Solo Rendita (0% capitale)', cap: 0, rend: 100 },
+            { lbl: `50% Capitale / 50% Rendita${canAllCapital ? '' : ' (max legge)'}`, cap: 50, rend: 50 },
+        ];
+        if (canAllCapital) scenarios.push({ lbl: '100% Capitale (rendita esigua)', cap: 100, rend: 0 });
+
+        doc.setFillColor(248,250,252); doc.roundedRect(M, y, W-M*2, scenarios.length * 13 + 10, 3, 3, 'F');
+        doc.setDrawColor(...teal); doc.setLineWidth(0.2); doc.roundedRect(M, y, W-M*2, scenarios.length * 13 + 10, 3, 3, 'S');
+        doc.setFontSize(7.5); doc.setFont(undefined,'normal'); doc.setTextColor(...grigio);
+        doc.text(`Coefficiente di conversione per età ${currentResults.etaPensione} anni: ${(coeff*100).toFixed(1)}%  |  ${canAllCapital ? '✓ Rendita esigua: puoi ritirare il 100% in capitale' : 'Max 50% in capitale (D.Lgs. 252/2005)'}`, M+4, y+6);
+        scenarios.forEach((sc, i) => {
+            const ry = y + 10 + i * 13;
+            const capNetto = currentResults.fondoNetto * sc.cap / 100;
+            const montRend = currentResults.fondoNetto * sc.rend / 100;
+            const renditaMens = (montRend * coeff) / 13;
+            doc.setFontSize(8.5); doc.setFont(undefined,'bold'); doc.setTextColor(...blu);
+            doc.text(sc.lbl, M+4, ry+5);
+            doc.setFont(undefined,'normal'); doc.setTextColor(30,41,59); doc.setFontSize(8);
+            if (sc.cap > 0)  doc.text(`Assegno subito: ${fmtMoney(capNetto)}`, M+4, ry+10);
+            if (sc.rend > 0) doc.text(`Rendita mensile lorda: ${fmtMoney(renditaMens)}/mese`, sc.cap > 0 ? W/2+4 : M+4, ry+10);
+        });
+        y += scenarios.length * 13 + 18;
+    }
+
+    // ---- NOTE TECNICHE ----
+    {
+        const noteLines = [
+            `Ipotesi di calcolo: rendimento fondo ${parametri.fondo_rendimento_stimato}% lordo (tassazione rendite ${parametri.tassazione_rendite_fondo}%); TFR rivalutato al ${parametri.tfr_rendimento_stimato}%; investimento alternativo ${parametri.investimento_privato_rendimento}% lordo (tassazione ${parametri.tassazione_rendite_privato}%).`,
+            `Aliquote IRPEF 2025 applicate: 23% (≤28.000 €), 35% (≤50.000 €), 43% (oltre). Aliquota TFR separata: marginale − 4% (min. 23%).`,
+            `Il report è generato in automatico e ha scopo esclusivamente illustrativo. Per una consulenza personalizzata contattare il proprio consulente finanziario.`,
+        ];
+        doc.setFillColor(252,252,252); doc.roundedRect(M, y, W-M*2, 28, 2, 2, 'F');
+        doc.setDrawColor(200,210,220); doc.setLineWidth(0.15); doc.roundedRect(M, y, W-M*2, 28, 2, 2, 'S');
+        doc.setTextColor(120,130,140); doc.setFontSize(7); doc.setFont(undefined,'normal');
+        noteLines.forEach((n, i) => {
+            const wrapped = doc.splitTextToSize(n, W-M*2-8);
+            doc.text(wrapped, M+4, y+5+i*9);
+        });
+    }
+
+    // ---- CONTATTI CONSULENTE ----
+    {
+        const boxY = y + 4;
+        doc.setFillColor(...blu); doc.roundedRect(M, boxY, W-M*2, 26, 3, 3, 'F');
+        doc.setTextColor(...bianco); doc.setFontSize(11); doc.setFont(undefined, 'bold');
+        doc.text('Vuoi approfondire? Parliamone.', W/2, boxY+8, {align:'center'});
+        doc.setFont(undefined, 'normal'); doc.setFontSize(9);
+        doc.text('Domenico Mosca — Consulente Finanziario FinecoBank', W/2, boxY+14, {align:'center'});
+        doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(194,217,255);
+        doc.text(`Tel. 331 7849240   ·   domenico.mosca@pfafineco.it`, W/2, boxY+21, {align:'center'});
+    }
+
+    drawFooter(3, 3);
+
+    return doc;
+}
+
+// ===================== DOWNLOAD PDF =====================
+function downloadPDF() {
+    const pdfDoc = window._pdfDoc || generatePDF();
+    pdfDoc.save(`Report_Previdenziale_${leadData.nome || 'Utente'}_${leadData.cognome || ''}.pdf`);
+}
+
+document.getElementById('success-download').addEventListener('click', downloadPDF);
+document.getElementById('success-close').addEventListener('click', () => { document.getElementById('success-modal').classList.add('hidden'); });
+document.getElementById('download-pdf-btn').addEventListener('click', downloadPDF);
+
+// ===================== EVENT LISTENERS =====================
+document.addEventListener('DOMContentLoaded', () => {
+    ['eta-attuale','eta-pensione','ral','montante-iniziale','crescita-salariale','contributo-volontario','contributo-datore']
+        .forEach(id => document.getElementById(id).addEventListener('input', () => {
+            if (id.includes('eta')) {
+                const eta  = document.getElementById('eta-attuale').value;
+                const pens = document.getElementById('eta-pensione').value;
+                document.getElementById('eta-value').textContent     = eta;
+                document.getElementById('pensione-value').textContent = pens;
+                document.getElementById('anni-mancanti').textContent  = `${Math.max(0,pens-eta)} anni`;
+            }
+            if (id === 'contributo-datore') updateContributoDatoreEuro();
+            calcolaVantaggio();
+        }));
+
+    document.querySelectorAll('input[name="tipo-lavoro"]').forEach(r => r.addEventListener('change', toggleUserType));
+    document.getElementById('regime-toggle').addEventListener('change', updateRegimeUI);
+    document.getElementById('ccnl').addEventListener('change', () => { updateCCNLContributi(); calcolaVantaggio(); });
+    document.getElementById('tfr-toggle').addEventListener('change', calcolaVantaggio);
+    document.getElementById('no-contributo-datore').addEventListener('change', calcolaVantaggio);
+    document.getElementById('erogazione-capitale-perc').addEventListener('input', calcolaErogazione);
+    document.getElementById('calcola-btn').addEventListener('click', (e) => { e.preventDefault(); calcolaVantaggio(); });
+    document.getElementById('gemini-analysis-btn').addEventListener('click', runAnalysis);
+    document.getElementById('explain-btn').addEventListener('click', runExplanation);
+    document.getElementById('close-modal-btn').addEventListener('click', () => document.getElementById('explanation-modal').classList.add('hidden'));
+
+    updateCCNLContributi();
+    calcolaVantaggio();
+});
+</script>
+</body>
+</html>
