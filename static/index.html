@@ -870,7 +870,12 @@ document.getElementById('lead-form').addEventListener('submit', async function(e
         if (emailSent) {
             statusEl.innerHTML = '<span class="text-green-700">\u2713 Email inviata correttamente</span>';
         } else {
-            statusEl.innerHTML = '<span class="text-amber-700">\u26a0 L\'invio email non \u00e8 riuscito. Puoi scaricare il PDF qui sotto.</span>';
+            const safeErr = String(emailError || 'Errore sconosciuto')
+                .replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+            statusEl.innerHTML =
+                '<div class="text-amber-700 font-semibold">\u26a0 L\'invio email non &egrave; riuscito.</div>' +
+                '<div class="text-xs text-gray-500 mt-1 font-mono break-all">' + safeErr + '</div>' +
+                '<div class="text-xs text-gray-500 mt-1">Puoi scaricare il PDF qui sotto.</div>';
         }
     }
     document.getElementById('success-modal').classList.remove('hidden');
