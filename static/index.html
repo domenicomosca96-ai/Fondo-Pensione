@@ -870,12 +870,21 @@ document.getElementById('lead-form').addEventListener('submit', async function(e
         if (emailSent) {
             statusEl.innerHTML = '<span class="text-green-700">\u2713 Email inviata correttamente</span>';
         } else {
-            const safeErr = String(emailError || 'Errore sconosciuto')
-                .replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
-            statusEl.innerHTML =
-                '<div class="text-amber-700 font-semibold">\u26a0 L\'invio email non &egrave; riuscito.</div>' +
-                '<div class="text-xs text-gray-500 mt-1 font-mono break-all">' + safeErr + '</div>' +
-                '<div class="text-xs text-gray-500 mt-1">Puoi scaricare il PDF qui sotto.</div>';
+            // Errore SMTP: messaggio generico per i lead. Diagnostica completa
+            // solo se la pagina \u00e8 aperta con ?debug=1 (admin/test).
+            const isDebug = new URLSearchParams(location.search).get('debug') === '1';
+            let html =
+                '<div class="text-amber-700 font-semibold">\u26a0 Invio email temporaneamente non disponibile.</div>' +
+                '<div class="text-xs text-gray-500 mt-1">Puoi scaricare il PDF qui sotto. Per assistenza scrivi a <strong>domenico.mosca@pfafineco.it</strong>.</div>';
+            if (isDebug) {
+                const safeErr = String(emailError || 'Errore sconosciuto')
+                    .replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+                html += '<div class="text-[10px] text-gray-400 mt-2 font-mono break-all">[debug] ' + safeErr + '</div>';
+            }
+            statusEl.innerHTML = html;
+            // L'errore completo resta sempre disponibile in console per i log
+            // del browser e nei log server-side (FastAPI logger).
+            if (emailError) console.warn('[send-report] errore backend:', emailError);
         }
     }
     document.getElementById('success-modal').classList.remove('hidden');
