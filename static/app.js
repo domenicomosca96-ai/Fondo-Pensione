@@ -2,6 +2,8 @@ const form = document.getElementById('simForm');
 const finalCapital = document.getElementById('finalCapital');
 const yearsLeft = document.getElementById('yearsLeft');
 const downloadPdfBtn = document.getElementById('downloadPdf');
+const sendPdfBtn = document.getElementById('sendPdf');
+const statusMessage = document.getElementById('statusMessage');
 
 let chart;
 let latestPayload;
@@ -17,8 +19,30 @@ function formToPayload() {
   };
 }
 
+function formToEmailPayload() {
+  const fd = new FormData(form);
+  return {
+    ...formToPayload(),
+    recipient_email: String(fd.get('recipient_email')).trim(),
+  };
+}
+
+function setStatus(message, type = 'info') {
+  statusMessage.textContent = message;
+  statusMessage.className = `status ${type}`;
+}
+
 function formatEUR(value) {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(value);
+}
+
+async function readError(response, fallback) {
+  try {
+    const detail = await response.json();
+    return detail.detail || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 async function loadProjection(payload) {
@@ -29,8 +53,7 @@ async function loadProjection(payload) {
   });
 
   if (!res.ok) {
-    const detail = await res.json();
-    throw new Error(detail.detail || 'Errore nel calcolo proiezione');
+    throw new Error(await readError(res, 'Errore nel calcolo proiezione'));
   }
 
   return res.json();
@@ -55,7 +78,7 @@ function updateChart(points) {
           borderColor: '#5a67d8',
           tension: 0.2,
           fill: true,
-          backgroundColor: 'rgba(90, 103, 216, 0.15)'
+          backgroundColor: 'rgba(90, 103, 216, 0.15)',
         },
       ],
     },
@@ -65,19 +88,22 @@ function updateChart(points) {
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   latestPayload = formToPayload();
+  setStatus('Calcolo in corso...');
 
   try {
     const data = await loadProjection(latestPayload);
     finalCapital.textContent = formatEUR(data.projected_capital);
     yearsLeft.textContent = data.years_to_retirement;
     updateChart(data.points);
+    setStatus('Dashboard aggiornata.', 'success');
   } catch (err) {
-    alert(err.message);
+    setStatus(err.message, 'error');
   }
 });
 
 downloadPdfBtn.addEventListener('click', async () => {
   const payload = latestPayload || formToPayload();
+  setStatus('Genero il PDF...');
 
   try {
     const res = await fetch('/api/report', {
@@ -87,7 +113,7 @@ downloadPdfBtn.addEventListener('click', async () => {
     });
 
     if (!res.ok) {
-      throw new Error('Errore nella generazione PDF');
+      throw new Error(await readError(res, 'Errore nella generazione PDF'));
     }
 
     const blob = await res.blob();
@@ -97,7 +123,36 @@ downloadPdfBtn.addEventListener('click', async () => {
     a.download = 'report-previdenziale.pdf';
     a.click();
     URL.revokeObjectURL(url);
+    setStatus('PDF generato e scaricato.', 'success');
   } catch (err) {
-    alert(err.message);
+    setStatus(err.message, 'error');
+  }
+});
+
+sendPdfBtn.addEventListener('click', async () => {
+  const payload = formToEmailPayload();
+
+  if (!payload.recipient_email) {
+    setStatus('Inserisci una email destinatario prima di inviare il report.', 'error');
+    return;
+  }
+
+  setStatus('Invio email in corso...');
+
+  try {
+    const res = await fetch('/api/report/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error(await readError(res, 'Errore durante invio email'));
+    }
+
+    const data = await res.json();
+    setStatus(`Report inviato a ${data.recipient_email}.`, 'success');
+  } catch (err) {
+    setStatus(err.message, 'error');
   }
 });

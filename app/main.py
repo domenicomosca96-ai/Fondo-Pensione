@@ -1,6 +1,8 @@
 import io
 import os
+import smtplib
 from datetime import datetime
+from email.message import EmailMessage
 from pathlib import Path
 from typing import List
 
@@ -35,6 +37,15 @@ class ProjectionResult(BaseModel):
     projected_capital: float
     years_to_retirement: int
     points: List[ProjectionPoint]
+
+
+class ReportEmailRequest(PensionInput):
+    recipient_email: str = Field(..., min_length=5, max_length=254)
+
+
+class ReportEmailResponse(BaseModel):
+    status: str
+    recipient_email: str
 
 
 app = FastAPI(title="Vantaggio Pensione API", version="1.1.0")
@@ -182,6 +193,56 @@ def build_pdf(payload: PensionInput, projection: ProjectionResult, ai_commentary
     return buffer
 
 
+def require_smtp_setting(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise HTTPException(status_code=500, detail=f"Variabile ambiente SMTP mancante: {name}")
+    return value
+
+
+def send_report_email(recipient_email: str, pdf_bytes: bytes) -> None:
+    smtp_server = require_smtp_setting("SMTP_SERVER").strip()
+    smtp_user = require_smtp_setting("SMTP_USER").strip()
+    smtp_password = require_smtp_setting("SMTP_PASSWORD").replace(" ", "")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+
+    message = EmailMessage()
+    message["Subject"] = "Il tuo report Vantaggio Pensione"
+    message["From"] = smtp_user
+    message["To"] = recipient_email
+    message.set_content(
+        "Ciao,\n\n"
+        "in allegato trovi il report previdenziale generato da Vantaggio Pensione.\n\n"
+        "A presto.\n"
+    )
+    message.add_attachment(
+        pdf_bytes,
+        maintype="application",
+        subtype="pdf",
+        filename="report-previdenziale.pdf",
+    )
+
+    try:
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=30) as server:
+                server.login(smtp_user, smtp_password)
+                server.send_message(message)
+        else:
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_password)
+                server.send_message(message)
+    except smtplib.SMTPAuthenticationError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Autenticazione SMTP fallita: verifica SMTP_USER e SMTP_PASSWORD/app password.",
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=502, detail=f"Connessione SMTP fallita: {exc}") from exc
+    except smtplib.SMTPException as exc:
+        raise HTTPException(status_code=502, detail=f"Invio email fallito: {exc}") from exc
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
@@ -209,3 +270,12 @@ def report(payload: PensionInput) -> StreamingResponse:
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=report-previdenziale.pdf"},
     )
+
+
+@app.post("/api/report/send", response_model=ReportEmailResponse)
+def report_send(payload: ReportEmailRequest) -> ReportEmailResponse:
+    projection_data = project_capital(payload)
+    commentary = generate_commentary_with_gemini(payload, projection_data)
+    pdf_bytes = build_pdf(payload, projection_data, commentary).getvalue()
+    send_report_email(payload.recipient_email, pdf_bytes)
+    return ReportEmailResponse(status="sent", recipient_email=payload.recipient_email)

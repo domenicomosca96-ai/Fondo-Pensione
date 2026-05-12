@@ -177,3 +177,22 @@ Questo comando esegue:
 - push del branch PR aggiornato
 
 Dopo 10-30 secondi, ricarica la PR su GitHub.
+
+
+## 11) Invio report via email
+Il download PDF usa `POST /api/report`; l'invio email usa `POST /api/report/send` e richiede queste variabili ambiente:
+
+```bash
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=tuo_account@gmail.com
+SMTP_PASSWORD=app_password_gmail
+```
+
+Per Gmail devi usare una **App Password**, non la password normale dell'account. Dopo aver modificato le variabili su Render, fai sempre **Manual Deploy → Clear build cache & deploy** o almeno riavvia il servizio.
+
+Verifica veloce:
+1. apri la dashboard;
+2. compila anche il campo **Email destinatario**;
+3. clicca **Invia Report via Email**;
+4. se qualcosa non va, il messaggio rosso mostra l'errore SMTP restituito dal backend.
