@@ -254,7 +254,8 @@ $bodyTxt =
     "— $advisorName ($advisorTitle)\n";
 
 $subject  = 'Il tuo Report Previdenziale — '.$advisorName;
-$fromAddr = $cfg['MITTENTE_EMAIL'] ?? 'noreply@example.it';
+// Se MITTENTE_EMAIL non è compilato, usa lo stesso utente SMTP come mittente
+$fromAddr = !empty($cfg['MITTENTE_EMAIL']) ? $cfg['MITTENTE_EMAIL'] : ($cfg['SMTP_USER'] ?? 'noreply@example.it');
 $fromName = $cfg['MITTENTE_NOME']  ?? 'Vantaggio Pensione';
 $bcc      = $cfg['BCC_CONSULENTE'] ?? null;
 

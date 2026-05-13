@@ -31,22 +31,17 @@ Crea su Aruba una sottocartella, ad esempio `httpdocs/calcolatore/` (o `public_h
 
 ### Step 2 — Configura `config.php`
 
-Sul tuo PC (o via editor del pannello Aruba), copia `config.php.example` come `config.php` e compila i campi:
+Copia `config.php.example` come `config.php`. Il template è **già pre-compilato** per Domenico Mosca / SFAdvisor / V-Hosting: devi solo riempire le 3 righe segnate con `← DA COMPILARE`:
 
 ```php
-'GEMINI_API_KEY' => 'AIza...',                  // dalla tua console Google AI Studio
-'SMTP_HOST'      => 'smtps.aruba.it',           // o 'smtp.gmail.com'
-'SMTP_PORT'      => 587,
-'SMTP_USER'      => 'info@tuodominio.it',
-'SMTP_PASS'      => 'la_tua_password',          // Gmail: usa App Password
-'MITTENTE_EMAIL' => 'info@tuodominio.it',       // deve appartenere al tuo dominio Aruba
-'BCC_CONSULENTE' => 'domenico.mosca@pfafineco.it',
-
-// IMPORTANTE — anti-abuse: in produzione COMPILA con il dominio del sito
-'ALLOWED_ORIGINS' => ['https://www.tuodominio.it', 'https://tuodominio.it'],
+'GEMINI_API_KEY' => '',                         // ← chiave da https://aistudio.google.com/app/apikey
+'SMTP_USER'      => '',                         // ← la tua casella V-Hosting (es. info@sfadvisor.it)
+'SMTP_PASS'      => '',                         // ← password della casella
 ```
 
-Ricarica `config.php` (compilato) nella stessa cartella.
+Tutto il resto (host SMTP V-Hosting su porta 465 SSL, brand, BCC, `ALLOWED_ORIGINS` su `sfadvisor.it`) è già impostato. Verifica solo che il nome del server SMTP nel pannello V-Hosting sia davvero `mailserver1.vhosting-it.com` (a volte è `mailserver2`, `mailserver3`, ecc.).
+
+Ricarica `config.php` (compilato) nella stessa cartella su FTP.
 
 ### Step 3 — Installa PHPMailer (consigliato)
 
