@@ -47,6 +47,9 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8')
         @keyframes fadeIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
         .blur-content { filter: blur(2.5px); opacity: .85; user-select: none; pointer-events: none; }
         .gate-overlay { background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 70%, rgba(255,255,255,.6) 88%, rgba(255,255,255,.92) 100%); }
+        /* Nasconde il marker default dei <details> su Safari/iOS — usiamo SVG chevron */
+        summary::-webkit-details-marker { display: none; }
+        summary { list-style: none; }
     </style>
     <title><?= h($BRAND_TITLE) ?> — Calcolatore Vantaggio Pensione</title>
     <script>
@@ -70,6 +73,23 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8')
         <h1 class="text-3xl md:text-5xl font-extrabold text-[#003B5C]">Calcolatore Previdenza</h1>
         <p class="mt-4 text-lg text-gray-600 max-w-2xl mx-auto">Dipendenti e Liberi Professionisti: Scopri quanto risparmi in tasse e i rendimenti generati usando un fondo pensione.</p>
     </header>
+
+    <!-- ===== INTRO TESTUALE (sopra il simulatore) ===== -->
+    <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8 mb-8 max-w-4xl mx-auto">
+        <h2 class="text-2xl md:text-3xl font-bold text-[#003B5C] mb-4">Calcola il vantaggio reale del fondo pensione</h2>
+        <p class="text-gray-700 leading-relaxed mb-3">
+            Scopri in pochi secondi quanto potresti ottenere grazie alla previdenza complementare.
+            Il simulatore confronta la scelta di aderire a un fondo pensione con l'alternativa standard,
+            considerando età, reddito, TFR, versamenti annui, eventuale contributo del datore di lavoro e vantaggio fiscale.
+        </p>
+        <p class="text-gray-700 leading-relaxed mb-3">
+            Il risultato ti aiuta a capire quanto può pesare nel tempo una corretta pianificazione previdenziale,
+            sia se sei un lavoratore dipendente sia se sei un libero professionista.
+        </p>
+        <p class="text-gray-800 leading-relaxed font-semibold">
+            Compila i dati e calcola il tuo vantaggio stimato.
+        </p>
+    </section>
 
     <main class="grid grid-cols-1 lg:grid-cols-5 gap-8">
 
@@ -207,6 +227,21 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8')
                     </button>
                 </div>
             </form>
+
+            <!-- Come leggere il risultato (collapsible, sotto al bottone Calcola) -->
+            <details class="mt-6 group bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+                <summary class="cursor-pointer flex items-center justify-between gap-3 p-4 font-semibold text-[#003B5C] hover:bg-gray-100 transition-colors">
+                    <span class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-[#005A78] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        Come leggere il risultato
+                    </span>
+                    <svg class="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </summary>
+                <div class="px-4 pb-4 pt-1 text-sm text-gray-700 leading-relaxed space-y-2">
+                    <p>Il valore mostrato rappresenta una stima indicativa del vantaggio netto potenziale rispetto a una gestione standard del risparmio o del TFR. Il calcolo tiene conto delle informazioni inserite e serve a visualizzare in modo semplice l'effetto combinato di deduzione fiscale, versamenti periodici, contributo del datore di lavoro e rendimento nel tempo.</p>
+                    <p>La simulazione non è una garanzia di rendimento futuro, ma un punto di partenza utile per capire se la previdenza complementare può essere efficiente per la tua situazione.</p>
+                </div>
+            </details>
         </div>
 
         <!-- ===== COLONNA DESTRA: RISULTATI ===== -->
@@ -277,6 +312,10 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8')
 
                     <!-- FORM LEAD -->
                     <div class="px-6 pb-8 pt-2 border-t border-gray-100" id="lead-form-section">
+                        <p class="text-sm text-gray-600 leading-relaxed text-center max-w-md mx-auto mt-4 mb-5">
+                            Lasciando i tuoi dati puoi ricevere un <strong>report previdenziale personalizzato in PDF</strong>,
+                            con una lettura più dettagliata della simulazione e delle principali opportunità da valutare.
+                        </p>
                         <div class="text-center mb-6">
                             <div class="inline-flex items-center gap-2 bg-[#003B5C] text-white text-xs font-bold px-4 py-1.5 rounded-full mb-3">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
@@ -458,6 +497,71 @@ function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8')
         </div>
     </main>
 
+    <!-- ===== SEO / APPROFONDIMENTI (collapsible, sotto il form) ===== -->
+    <aside class="mt-12 max-w-4xl mx-auto" aria-labelledby="seo-heading">
+        <h2 id="seo-heading" class="text-2xl font-bold text-[#003B5C] mb-2 text-center">Approfondimenti sulla previdenza complementare</h2>
+        <p class="text-sm text-gray-500 text-center mb-6">Apri le sezioni di tuo interesse per approfondire.</p>
+        <div class="space-y-3">
+
+            <details class="bg-white rounded-xl border border-gray-200 shadow-sm group overflow-hidden">
+                <summary class="cursor-pointer flex items-center justify-between gap-3 p-5 font-semibold text-[#003B5C] hover:bg-gray-50 transition-colors">
+                    <span>Perché usare un simulatore fondo pensione</span>
+                    <svg class="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </summary>
+                <div class="px-5 pb-5 text-gray-700 leading-relaxed space-y-3">
+                    <p>Il fondo pensione è uno degli strumenti più importanti per costruire una pensione integrativa e migliorare la pianificazione finanziaria di lungo periodo. Molti lavoratori, però, non hanno una percezione chiara del suo impatto reale: quanto si può risparmiare in tasse, quanto può incidere il TFR, quanto vale il contributo del datore di lavoro e quale capitale si può accumulare nel tempo.</p>
+                    <p>Un simulatore previdenziale permette di trasformare queste variabili in numeri comprensibili. Non serve a prevedere il futuro con certezza, ma aiuta a confrontare scenari diversi e a prendere decisioni più consapevoli.</p>
+                </div>
+            </details>
+
+            <details class="bg-white rounded-xl border border-gray-200 shadow-sm group overflow-hidden">
+                <summary class="cursor-pointer flex items-center justify-between gap-3 p-5 font-semibold text-[#003B5C] hover:bg-gray-50 transition-colors">
+                    <span>Fondo pensione e vantaggio fiscale</span>
+                    <svg class="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </summary>
+                <div class="px-5 pb-5 text-gray-700 leading-relaxed space-y-3">
+                    <p>Uno dei principali vantaggi della previdenza complementare è la possibilità di dedurre i versamenti dal reddito imponibile, entro i limiti previsti dalla normativa. Questo significa che una parte di quanto versi nel fondo pensione può ridurre il reddito su cui paghi le imposte, generando un beneficio fiscale potenzialmente rilevante.</p>
+                    <p>Il vantaggio è maggiore per chi ha aliquote marginali più alte, perché ogni euro dedotto può produrre un risparmio fiscale più significativo.</p>
+                </div>
+            </details>
+
+            <details class="bg-white rounded-xl border border-gray-200 shadow-sm group overflow-hidden">
+                <summary class="cursor-pointer flex items-center justify-between gap-3 p-5 font-semibold text-[#003B5C] hover:bg-gray-50 transition-colors">
+                    <span>TFR al fondo pensione: perché simularlo</span>
+                    <svg class="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </summary>
+                <div class="px-5 pb-5 text-gray-700 leading-relaxed space-y-3">
+                    <p>Per i lavoratori dipendenti, una delle decisioni più importanti riguarda la destinazione del TFR. Lasciarlo secondo la gestione ordinaria o trasferirlo a un fondo pensione può produrre risultati molto diversi nel lungo periodo.</p>
+                    <p>Il simulatore ti aiuta a visualizzare l'impatto della scelta, considerando anche l'orizzonte temporale fino alla pensione. Più lungo è il periodo disponibile, maggiore può essere l'effetto della capitalizzazione dei versamenti.</p>
+                </div>
+            </details>
+
+            <details class="bg-white rounded-xl border border-gray-200 shadow-sm group overflow-hidden">
+                <summary class="cursor-pointer flex items-center justify-between gap-3 p-5 font-semibold text-[#003B5C] hover:bg-gray-50 transition-colors">
+                    <span>Il contributo del datore di lavoro</span>
+                    <svg class="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </summary>
+                <div class="px-5 pb-5 text-gray-700 leading-relaxed space-y-3">
+                    <p>In molti contratti collettivi, il lavoratore dipendente può avere diritto a un contributo aggiuntivo del datore di lavoro se decide di aderire al fondo pensione e versare una quota minima a proprio carico.</p>
+                    <p>Questo contributo è spesso sottovalutato, ma può rappresentare un vantaggio importante: è una somma aggiuntiva che si accumula nel tempo e che, senza adesione al fondo, potrebbe non essere percepita.</p>
+                    <p>Per questo nel simulatore è presente una sezione dedicata al contributo del datore di lavoro.</p>
+                </div>
+            </details>
+
+            <details class="bg-white rounded-xl border border-gray-200 shadow-sm group overflow-hidden">
+                <summary class="cursor-pointer flex items-center justify-between gap-3 p-5 font-semibold text-[#003B5C] hover:bg-gray-50 transition-colors">
+                    <span>Dipendente o libero professionista: cosa cambia</span>
+                    <svg class="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </summary>
+                <div class="px-5 pb-5 text-gray-700 leading-relaxed space-y-3">
+                    <p>Il simulatore distingue tra lavoratore dipendente e libero professionista perché le logiche previdenziali possono essere diverse.</p>
+                    <p>Il <strong>dipendente</strong> può valutare TFR, contributo datoriale, CCNL di riferimento e versamenti volontari. Il <strong>libero professionista</strong>, invece, può usare il fondo pensione soprattutto come strumento di integrazione previdenziale e ottimizzazione fiscale, valutando quanto versare ogni anno in funzione del reddito e degli obiettivi futuri.</p>
+                    <p>In entrambi i casi, il punto centrale è lo stesso: costruire una strategia previdenziale prima che il problema pensionistico diventi urgente.</p>
+                </div>
+            </details>
+
+        </div>
+    </aside>
 
 </div>
 
