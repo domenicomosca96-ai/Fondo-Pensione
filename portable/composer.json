@@ -1,0 +1,6 @@
+{
+    "description": "Vantaggio Pensione — bundle portabile (HTML + PHP). Dipendenze opzionali.",
+    "require": {
+        "phpmailer/phpmailer": "^6.9"
+    }
+}

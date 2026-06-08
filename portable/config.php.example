@@ -1,0 +1,60 @@
+<?php
+/**
+ * config.php.example — Template di configurazione pre-compilato per
+ *                      Domenico Mosca / SFAdvisor / V-Hosting.
+ *
+ * COSA DEVI FARE:
+ *   1. Copia questo file come `config.php` (stessa cartella)
+ *   2. Compila SOLO le 3 righe segnate con  ← DA COMPILARE
+ *   3. Carica `config.php` su V-Hosting via FTP
+ *
+ * Il file `config.php` finale contiene segreti (API key + password SMTP).
+ * Il `.htaccess` accanto blocca l'accesso diretto via web.
+ * NON committare `config.php` su Git (è già nel .gitignore).
+ */
+
+return [
+
+    // ====== GEMINI (analisi AI opzionale) ======
+    'GEMINI_API_KEY' => '',                       // ← DA COMPILARE — generala su https://aistudio.google.com/app/apikey (gratis)
+    'GEMINI_MODEL'   => 'gemini-2.5-flash',
+
+    // ====== SMTP V-Hosting (server uscita posta del tuo dominio) ======
+    // Verifica nel tuo pannello V-Hosting il nome esatto del server:
+    // di solito è mailserver1.vhosting-it.com o mailserver2.vhosting-it.com.
+    'SMTP_HOST' => 'mailserver1.vhosting-it.com',
+    'SMTP_PORT' => 465,
+    'SMTP_USER' => '',                            // ← DA COMPILARE — la tua casella V-Hosting (es. 'info@sfadvisor.it')
+    'SMTP_PASS' => '',                            // ← DA COMPILARE — password della casella
+    'SMTP_SSL'  => true,                          // V-Hosting su 465 vuole SSL diretto
+    'SMTP_DEBUG'=> false,                         // metti true se l'email non parte e vuoi vedere il dialogo SMTP nel log
+
+    // ====== Mittente (lasciato vuoto = usa SMTP_USER) ======
+    'MITTENTE_EMAIL' => '',                       // vuoto → il "From" sarà uguale a SMTP_USER (come da tua scelta)
+    'MITTENTE_NOME'  => 'Domenico Mosca — Vantaggio Pensione',
+
+    // ====== Copia consulente ======
+    'BCC_CONSULENTE' => 'domenico.mosca@pfafineco.it', // ricevi una copia di ogni lead
+
+    // ====== Brand consulente (mostrato nel calcolatore, nel PDF e nell'email) ======
+    // ATTENZIONE: ADVISOR_NAME e ADVISOR_TITLE compaiono ANCHE nel testo del
+    // consenso privacy del form. Devono identificare il VERO data controller.
+    'ADVISOR_NAME'   => 'Domenico Mosca',
+    'ADVISOR_TITLE'  => 'Consulente Finanziario FinecoBank',
+    'ADVISOR_PHONE'  => '331 7849240',
+    'ADVISOR_EMAIL'  => 'domenico.mosca@pfafineco.it',
+
+    // ====== Anti-abuse ======
+    // Domini autorizzati a chiamare il backend. Origin diverse → HTTP 400.
+    'ALLOWED_ORIGINS' => [
+        'https://www.sfadvisor.it',
+        'https://sfadvisor.it',
+    ],
+
+    // Rate-limit per IP, finestra 1h. 0 = disabilitato.
+    'RATE_LIMIT_MAX_PER_HOUR'        => 5,        // invii email
+    'RATE_LIMIT_MAX_PER_HOUR_GEMINI' => 20,       // chiamate AI
+
+    // Cap dimensione PDF in byte (3 MB).
+    'PDF_MAX_BYTES' => 3 * 1024 * 1024,
+];

@@ -1,0 +1,23 @@
+# Blocca accesso diretto a file sensibili via web (Apache).
+<FilesMatch "^(config\.php|config\.php\.example|.*\.log|.*\.json|composer\.json|composer\.lock)$">
+    Require all denied
+</FilesMatch>
+
+# Fallback per Apache 2.2 (alcune versioni di Aruba)
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^(config\.php|config\.php\.example|.*\.log|.*\.json|composer\.json|composer\.lock)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# Forza UTF-8 sui contenuti HTML
+AddDefaultCharset UTF-8
+
+# Eccezione: rate-limit.json deve poter essere letto/scritto da PHP, ma
+# resta bloccato verso il web per la regola sopra (.json wildcard).
+
+# Blocca il file di log esplicitamente (in più rispetto al wildcard)
+<Files "invia-report.log">
+    Require all denied
+</Files>
