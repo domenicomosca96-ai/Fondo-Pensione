@@ -1,0 +1,5 @@
+{
+  "_comment": "Storico anti-duplicazione. Ogni run appende un oggetto qui. Inizializzato vuoto.",
+  "version": 1,
+  "topics": []
+}

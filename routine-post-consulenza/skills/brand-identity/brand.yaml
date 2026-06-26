@@ -1,0 +1,33 @@
+# Parametri brand strutturati — Domenico Mosca
+# NOTA: i colori sono stimati dai materiali forniti. TODO: confermare gli HEX esatti.
+
+identity:
+  name: "Domenico Mosca"
+  role: "Consulente Finanziario"
+  firm: "Fineco"
+  linkedin: "https://www.linkedin.com/in/domenico-mosca-3a4434167"
+  signature: "firma manoscritta oro"
+
+colors:
+  # Valori APPROSSIMATIVI dedotti dal template fornito — da confermare.
+  navy_deep: "#0B0E2A"      # sfondo principale
+  royal_blue: "#3551E0"     # accento / triangolo dinamico
+  gold: "#E9D29A"           # firma, dettagli premium
+  white: "#FFFFFF"          # testo su navy
+
+typography:
+  heading: "sans-serif bold maiuscolo"   # es. titoli tipo 'RISULTATI OTTENUTI'
+  body: "sans-serif regolare"
+  signature: "script corsivo"
+  # TODO: indicare i font reali se definiti (es. Montserrat, ecc.)
+
+layout:
+  background: "navy con taglio diagonale royal_blue in basso a sinistra"
+  header: "firma oro + 'Consulente Finanziario'"
+  footer: "lockup 'DOMENICO MOSCA | FINECO'"
+
+tone:
+  - "educativo"
+  - "sobrio"
+  - "autorevole"
+  - "accessibile"

@@ -1,0 +1,50 @@
+# Configurazione routine giornaliera contenuti finanziari
+# Letta all'avvio dalla skill daily-financial-content-creator.
+
+meta:
+  owner: "Domenico Mosca"
+  role: "Consulente Finanziario"
+  firm: "Fineco"
+  locale: "it-IT"
+  timezone: "Europe/Rome"
+
+# Finestra temporale entro cui le notizie sono considerate "fresche".
+lookback:
+  hours: 36          # scarta news più vecchie di 36h
+  max_items: 25      # massimo n. di item da valutare per run
+
+# Fonti da consultare per i fatti di mercato.
+# TODO: sostituire i placeholder con feed/URL reali prima del primo run reale.
+sources:
+  rss: []            # es: "https://www.ilsole24ore.com/rss/finanza.xml"
+  web_search:
+    enabled: true
+    queries:
+      - "mercati azionari oggi"
+      - "Fed BCE tassi liquidità"
+      - "semiconduttori AI megatrend"
+    # le query macro riflettono i temi ricorrenti del brand (vedi investing-master-analyst)
+  allow_paywalled: false
+
+# Parametri dell'output da generare.
+output:
+  platform: "linkedin"
+  formats:
+    - "post"               # testo LinkedIn
+    - "hook_options"       # 3 varianti di apertura
+  length:
+    post_chars_max: 1300
+  language: "it"
+  cta: true                # includere call-to-action verso consulenza
+  disclaimer: true         # includere disclaimer finanziario
+
+# Anti-duplicazione: storico dei temi già trattati.
+dedup:
+  file: "covered_topics.json"
+  cooldown_days: 21        # non ripetere lo stesso angle entro 21 giorni
+
+# Regole non negoziabili (vedi anche brand-identity).
+guardrails:
+  no_unverified_numbers: true     # nessun dato/percentuale non verificabile
+  no_promises_of_return: true     # vietato promettere rendimenti
+  cite_sources_internally: true   # tracciare la fonte di ogni numero usato
