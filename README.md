@@ -56,3 +56,8 @@ Senza configurazione SMTP l'app continua a funzionare: il modale segnala l'error
 docker build -t vantaggio-pensione .
 docker run -p 8000:8000 --env-file .env vantaggio-pensione
 ```
+
+## Altri tool nel repo
+
+- [`whisper-transcriber/`](./whisper-transcriber/README.md) — web app locale (FastAPI + [faster-whisper](https://github.com/SYSTRAN/faster-whisper)) per trascrivere file audio in testo in italiano, interamente offline. Indipendente dall'app Vantaggio Pensione, gira sulla porta 8001.
+- [`markitdown-converter/`](./markitdown-converter/README.md) — web app locale (FastAPI + [MarkItDown](https://github.com/microsoft/markitdown)) per convertire PDF, Word, Excel, PowerPoint, immagini, audio, HTML, CSV, ZIP e altro in Markdown, interamente offline. Indipendente dall'app Vantaggio Pensione, gira sulla porta 8002.
