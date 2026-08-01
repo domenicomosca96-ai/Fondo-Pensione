@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trascrizione Audio Locale — faster-whisper</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161923;
+    --panel-2: #1e2230;
+    --border: #2a2f3f;
+    --text: #eef0f5;
+    --text-dim: #9aa1b4;
+    --accent: #6c8bff;
+    --accent-2: #8f6cff;
+    --ok: #35c98f;
+    --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(circle at 20% -10%, #1c2036 0%, var(--bg) 55%);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  .wrap { width: 100%; max-width: 720px; }
+  header { text-align: center; margin-bottom: 28px; }
+  header h1 {
+    font-size: 1.7rem;
+    margin: 0 0 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p { color: var(--text-dim); margin: 0; font-size: 0.95rem; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    margin-bottom: 20px;
+  }
+
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+    background: var(--panel-2);
+  }
+  #dropzone.dragover { border-color: var(--accent); background: #1a2038; }
+  #dropzone svg { width: 40px; height: 40px; margin-bottom: 10px; color: var(--accent); }
+  #dropzone .main-txt { font-weight: 600; margin: 0 0 4px; }
+  #dropzone .sub-txt { color: var(--text-dim); font-size: 0.85rem; margin: 0; }
+  #fileInput { display: none; }
+
+  #fileInfo {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.9rem;
+  }
+  #fileInfo.show { display: flex; }
+  #fileInfo .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 10px; }
+  #fileInfo button {
+    background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1rem;
+  }
+
+  .btn {
+    appearance: none;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform .1s ease, opacity .15s ease;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    color: white;
+    width: 100%;
+    margin-top: 16px;
+    padding: 14px;
+    font-size: 1rem;
+  }
+  .btn-secondary {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  #status {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+  }
+  #status.show { display: flex; }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #error {
+    display: none;
+    margin-top: 14px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: rgba(255,107,107,0.1);
+    border: 1px solid rgba(255,107,107,0.4);
+    color: var(--err);
+    font-size: 0.88rem;
+  }
+  #error.show { display: block; }
+
+  #resultCard { display: none; }
+  #resultCard.show { display: block; }
+  .result-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .result-head h2 { font-size: 1.05rem; margin: 0; }
+  .meta { color: var(--text-dim); font-size: 0.82rem; }
+
+  #transcript {
+    width: 100%;
+    min-height: 220px;
+    resize: vertical;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 14px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    font-family: inherit;
+  }
+
+  .actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .actions .btn { flex: 1; min-width: 160px; margin-top: 0; }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--ok);
+    color: #0a0a0a;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.88rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  footer { text-align: center; color: var(--text-dim); font-size: 0.78rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Trascrizione Audio → Testo</h1>
+    <p>100% locale, powered by faster-whisper · Italiano</p>
+  </header>
+
+  <div class="card">
+    <div id="dropzone">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/>
+      </svg>
+      <p class="main-txt">Trascina qui un file audio o clicca per selezionarlo</p>
+      <p class="sub-txt">MP3, WAV, M4A, OGG, FLAC, WEBM, AAC — max 200 MB</p>
+    </div>
+    <input type="file" id="fileInput" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.webm,.aac,.wma,.mp4" />
+
+    <div id="fileInfo">
+      <span class="name" id="fileName"></span>
+      <button id="clearFile" title="Rimuovi">✕</button>
+    </div>
+
+    <button class="btn btn-primary" id="transcribeBtn" disabled>Avvia trascrizione</button>
+
+    <div id="status">
+      <div class="spinner"></div>
+      <span id="statusText">Trascrizione in corso, potrebbe richiedere qualche minuto…</span>
+    </div>
+
+    <div id="error"></div>
+  </div>
+
+  <div class="card" id="resultCard">
+    <div class="result-head">
+      <h2>Trascrizione</h2>
+      <span class="meta" id="resultMeta"></span>
+    </div>
+    <textarea id="transcript" spellcheck="false"></textarea>
+    <div class="actions">
+      <button class="btn btn-secondary" id="copyBtn">📋 Copia negli appunti</button>
+      <button class="btn btn-secondary" id="downloadBtn">⬇ Scarica .txt</button>
+    </div>
+  </div>
+
+  <footer>Il file audio viene elaborato interamente sul tuo computer, non lascia mai la macchina locale.</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const fileInfo = document.getElementById('fileInfo');
+  const fileName = document.getElementById('fileName');
+  const clearFile = document.getElementById('clearFile');
+  const transcribeBtn = document.getElementById('transcribeBtn');
+  const statusBox = document.getElementById('status');
+  const statusText = document.getElementById('statusText');
+  const errorBox = document.getElementById('error');
+  const resultCard = document.getElementById('resultCard');
+  const resultMeta = document.getElementById('resultMeta');
+  const transcript = document.getElementById('transcript');
+  const copyBtn = document.getElementById('copyBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const toast = document.getElementById('toast');
+
+  let selectedFile = null;
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2200);
+  }
+
+  function setError(msg) {
+    if (!msg) {
+      errorBox.classList.remove('show');
+      errorBox.textContent = '';
+      return;
+    }
+    errorBox.textContent = msg;
+    errorBox.classList.add('show');
+  }
+
+  function setFile(file) {
+    selectedFile = file;
+    if (file) {
+      fileName.textContent = `${file.name} · ${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+      fileInfo.classList.add('show');
+      transcribeBtn.disabled = false;
+    } else {
+      fileInfo.classList.remove('show');
+      transcribeBtn.disabled = true;
+      fileInput.value = '';
+    }
+    setError(null);
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) setFile(fileInput.files[0]);
+  });
+  clearFile.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setFile(null);
+    resultCard.classList.remove('show');
+  });
+
+  transcribeBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    setError(null);
+    resultCard.classList.remove('show');
+    statusBox.classList.add('show');
+    statusText.textContent = 'Trascrizione in corso, potrebbe richiedere qualche minuto…';
+    transcribeBtn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Errore durante la trascrizione.');
+      }
+      transcript.value = data.text || '(nessun testo rilevato)';
+      const durationTxt = data.duration ? `${Math.round(data.duration)}s audio` : '';
+      resultMeta.textContent = [data.language ? `lingua: ${data.language}` : '', durationTxt].filter(Boolean).join(' · ');
+      resultCard.classList.add('show');
+    } catch (err) {
+      setError(err.message || 'Errore di rete durante la trascrizione.');
+    } finally {
+      statusBox.classList.remove('show');
+      transcribeBtn.disabled = false;
+    }
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(transcript.value);
+      showToast('Testo copiato negli appunti ✓');
+    } catch {
+      transcript.select();
+      document.execCommand('copy');
+      showToast('Testo copiato negli appunti ✓');
+    }
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    const blob = new Blob([transcript.value], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const base = (selectedFile?.name || 'trascrizione').replace(/\.[^/.]+$/, '');
+    a.href = url;
+    a.download = `${base}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+</script>
+</body>
+</html>
